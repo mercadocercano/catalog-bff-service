@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  catalog-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: catalog-service
+    ports:
+      - "8085:8085"
+    environment:
+      - PORT=8085
+      - PIM_SERVICE_URL=http://pim-service:8080
+      - STOCK_SERVICE_URL=http://stock-service:8080
+    networks:
+      - saas-mt-network
+
+networks:
+  saas-mt-network:
+    external: true
