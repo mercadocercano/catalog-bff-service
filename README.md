@@ -1,6 +1,34 @@
 # Catalog Service
 
-Servicio de orquestación para consultas agregadas de catálogo.
+**Servicio de orquestación de lecturas agregadas** para el proyecto SaaS Multi-Tenant "Tienda Vecina".
+
+## 🎯 Propósito
+
+Este servicio **NO es un dominio nuevo**. Es un **servicio de composición** (API Composition Pattern) que:
+
+- ✅ Orquesta consultas a múltiples servicios
+- ✅ Mergea respuestas en vistas unificadas
+- ❌ No persiste datos
+- ❌ No tiene reglas de negocio propias
+
+**Rol:** Backend for Frontend (BFF) simplificado - separación query/command (CQRS light).
+
+> 📖 **Decisión de arquitectura completa:** Ver [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+---
+
+## 🏗️ Arquitectura
+
+```
+Frontend → catalog-service → [PIM + Stock] → Response unificada
+```
+
+**Patrón aplicado:**
+- API Composition Pattern
+- CQRS (separación lectura/escritura)
+- Stateless orchestration
+
+---
 
 ## HITO 1: Variante + Stock
 
