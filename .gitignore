@@ -4,7 +4,7 @@
 *.dll
 *.so
 *.dylib
-catalog-service
+catalog-bff-service
 
 # Test binary, built with `go test -c`
 *.test

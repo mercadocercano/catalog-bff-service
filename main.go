@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	
-	"catalog-service/src/handler"
+	"catalog-bff-service/src/handler"
 )
 
 func getEnv(key, defaultValue string) string {
@@ -24,7 +24,7 @@ func main() {
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{"status": "healthy", "service": "catalog-service"})
+		c.JSON(200, gin.H{"status": "healthy", "service": "catalog-bff-service"})
 	})
 
 	// API v1
@@ -38,6 +38,6 @@ func main() {
 	}
 
 	port := getEnv("PORT", "8085")
-	log.Printf("Catalog service iniciando en http://localhost:%s", port)
+	log.Printf("Catalog BFF service iniciando en http://localhost:%s", port)
 	router.Run(":" + port)
 }

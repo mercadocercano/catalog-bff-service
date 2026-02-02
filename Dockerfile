@@ -10,7 +10,7 @@ RUN go mod download
 COPY . .
 
 # Build
-RUN CGO_ENABLED=0 GOOS=linux go build -o catalog-service main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o catalog-bff-service main.go
 
 # Runtime
 FROM alpine:latest
@@ -18,8 +18,8 @@ RUN apk --no-cache add ca-certificates
 
 WORKDIR /root/
 
-COPY --from=builder /app/catalog-service .
+COPY --from=builder /app/catalog-bff-service .
 
 EXPOSE 8085
 
-CMD ["./catalog-service"]
+CMD ["./catalog-bff-service"]

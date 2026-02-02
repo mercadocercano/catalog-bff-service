@@ -1,8 +1,8 @@
-# Catalog Service
+# Catalog BFF Service
 
-**Servicio de orquestación de lecturas agregadas** para el proyecto SaaS Multi-Tenant "Tienda Vecina".
+**Backend for Frontend (BFF)** de orquestación de lecturas agregadas para el proyecto SaaS Multi-Tenant "Tienda Vecina".
 
-📦 **Repositorio oficial:** https://github.com/mercadocercano/catalog-service
+📦 **Repositorio oficial:** https://github.com/mercadocercano/catalog-bff-service
 
 ## 🎯 Propósito
 

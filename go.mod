@@ -1,4 +1,4 @@
-module catalog-service
+module catalog-bff-service
 
 go 1.21
 
