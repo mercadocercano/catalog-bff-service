@@ -2,6 +2,8 @@
 
 **Servicio de orquestación de lecturas agregadas** para el proyecto SaaS Multi-Tenant "Tienda Vecina".
 
+📦 **Repositorio oficial:** https://github.com/mercadocercano/catalog-service
+
 ## 🎯 Propósito
 
 Este servicio **NO es un dominio nuevo**. Es un **servicio de composición** (API Composition Pattern) que:
