@@ -72,9 +72,16 @@ GET /api/v1/catalog/variants/{variant_id}
 
 ### Variables de entorno
 
+**Servicios:**
 - `PIM_SERVICE_URL`: URL del PIM service (default: `http://localhost:8090`)
 - `STOCK_SERVICE_URL`: URL del Stock service (default: `http://localhost:8100`)
+- `TENANT_SERVICE_URL`: URL del Tenant service (opcional)
 - `PORT`: Puerto del servicio (default: `8085`)
+
+**Cache (opcional):**
+- `TENANT_CONFIG_CACHE_TTL`: TTL para cache de configuración de tenant (default: `60s`)
+- `STOCK_CACHE_TTL`: TTL para cache de stock (default: `5s`)
+- `CACHE_CLEANUP_INTERVAL`: Intervalo de limpieza automática (default: `60s`)
 
 ### Ejecución local
 
@@ -87,4 +94,29 @@ go run main.go
 ```bash
 docker build -t catalog-service .
 docker run -p 8085:8085 catalog-service
+```
+
+---
+
+## 🚀 Cache In-Memory
+
+Este servicio implementa cache in-memory para mejorar la performance:
+
+**Qué se cachea:**
+- ✅ Tenant configuration (stock policy) - TTL: 60s
+- ✅ Stock availability por SKU - TTL: 5s
+
+**Características:**
+- Cache best-effort (nunca rompe requests)
+- Fallback automático si falla
+- Thread-safe (sync.Map)
+- Cleanup automático de entradas expiradas
+
+**Documentación completa:** Ver [CACHE_STRATEGY.md](./CACHE_STRATEGY.md)
+
+**Configuración:**
+```bash
+# Ejemplo: cache más agresivo
+TENANT_CONFIG_CACHE_TTL=120s
+STOCK_CACHE_TTL=10s
 ```

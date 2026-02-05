@@ -12,6 +12,7 @@ services:
       - PORT=8085
       - PIM_SERVICE_URL=http://pim-service:8080
       - STOCK_SERVICE_URL=http://stock-service:8080
+      - TENANT_SERVICE_URL=http://tenant-service:8120
     networks:
       - saas-mt-network
 
