@@ -148,7 +148,7 @@ type UpdateVariantRequest struct {
 
 // ToggleVariantStatusRequest - Request para activar/desactivar variante
 type ToggleVariantStatusRequest struct {
-	IsActive bool `json:"is_active" binding:"required"`
+	IsActive bool `json:"is_active"` // No usar binding:required con bool (false es válido)
 }
 
 // VariantCreatedResponse - Response al crear variante

@@ -67,9 +67,33 @@ func (h *ProductVariantHandler) CreateVariant(c *gin.Context) {
 		return
 	}
 
+	// Construir payload para PIM (incluir product_id requerido)
+	pimReq := map[string]interface{}{
+		"product_id": productID,
+		"name":       req.Name,
+	}
+	
+	// SKU es opcional en PIM pero si viene del BFF, enviarlo
+	if req.SKU != "" {
+		pimReq["sku"] = req.SKU
+	}
+	
+	// Price es requerido
+	pimReq["price"] = req.Price
+	
+	// is_default es opcional
+	if req.IsDefault {
+		pimReq["is_default"] = req.IsDefault
+	}
+	
+	// Attributes opcionales
+	if len(req.Attributes) > 0 {
+		pimReq["attributes"] = req.Attributes
+	}
+
 	// Llamar a PIM Service
 	pimURL := fmt.Sprintf("%s/api/v1/products/%s/variants", h.pimServiceURL, productID)
-	body, _ := json.Marshal(req)
+	body, _ := json.Marshal(pimReq)
 
 	httpReq, err := http.NewRequest("POST", pimURL, bytes.NewBuffer(body))
 	if err != nil {
@@ -194,8 +218,12 @@ func (h *ProductVariantHandler) ListProductVariants(c *gin.Context) {
 		return
 	}
 
-	var pimVariants []dto.PIMVariantResponse
-	if err := json.NewDecoder(resp.Body).Decode(&pimVariants); err != nil {
+	// El PIM devuelve {variants: [...], pagination: {...}}
+	var pimResp struct {
+		Variants   []dto.PIMVariantResponse `json:"variants"`
+		Pagination map[string]interface{}   `json:"pagination"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&pimResp); err != nil {
 		c.JSON(http.StatusInternalServerError, dto.ErrorResponse{
 			Error:   "parse_error",
 			Message: "Error al parsear respuesta",
@@ -204,7 +232,7 @@ func (h *ProductVariantHandler) ListProductVariants(c *gin.Context) {
 	}
 
 	// Enriquecer con información de stock
-	variants := h.enrichVariantsWithStock(pimVariants, tenantID)
+	variants := h.enrichVariantsWithStock(pimResp.Variants, tenantID)
 
 	c.JSON(http.StatusOK, variants)
 }
@@ -315,9 +343,28 @@ func (h *ProductVariantHandler) UpdateVariant(c *gin.Context) {
 		return
 	}
 
+	// Construir payload para PIM (solo campos no vacíos)
+	pimReq := make(map[string]interface{})
+	
+	if req.Name != "" {
+		pimReq["name"] = req.Name
+	}
+	if req.SKU != "" {
+		pimReq["sku"] = req.SKU
+	}
+	if req.Price > 0 {
+		pimReq["price"] = req.Price
+	}
+	if req.IsDefault {
+		pimReq["is_default"] = req.IsDefault
+	}
+	if len(req.Attributes) > 0 {
+		pimReq["attributes"] = req.Attributes
+	}
+
 	// Llamar a PIM Service
 	pimURL := fmt.Sprintf("%s/api/v1/products/%s/variants/%s", h.pimServiceURL, productID, variantID)
-	body, _ := json.Marshal(req)
+	body, _ := json.Marshal(pimReq)
 
 	httpReq, err := http.NewRequest("PUT", pimURL, bytes.NewBuffer(body))
 	if err != nil {
@@ -405,15 +452,42 @@ func (h *ProductVariantHandler) ToggleVariantStatus(c *gin.Context) {
 		return
 	}
 
+	// Primero obtener la variante actual para preservar sus datos
+	getURL := fmt.Sprintf("%s/api/v1/products/%s/variants/%s", h.pimServiceURL, productID, variantID)
+	getReq, _ := http.NewRequest("GET", getURL, nil)
+	getReq.Header.Set("X-Tenant-ID", tenantID)
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		getReq.Header.Set("Authorization", authHeader)
+	}
+
+	getResp, err := h.httpClient.Do(getReq)
+	if err != nil || getResp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusBadGateway, dto.ErrorResponse{
+			Error:   "pim_unavailable",
+			Message: "No se pudo obtener la variante",
+		})
+		return
+	}
+
+	var currentVariant dto.PIMVariantResponse
+	json.NewDecoder(getResp.Body).Decode(&currentVariant)
+	getResp.Body.Close()
+
 	// Determinar el nuevo status
 	newStatus := "inactive"
 	if req.IsActive {
 		newStatus = "active"
 	}
 
-	// Llamar a PIM para actualizar status
+	// Construir update con todos los campos necesarios
 	updateReq := map[string]interface{}{
+		"name":   currentVariant.Name,
 		"status": newStatus,
+	}
+	
+	// Incluir SKU si existe (evitar validación min)
+	if currentVariant.SKU != "" {
+		updateReq["sku"] = currentVariant.SKU
 	}
 
 	pimURL := fmt.Sprintf("%s/api/v1/products/%s/variants/%s", h.pimServiceURL, productID, variantID)
