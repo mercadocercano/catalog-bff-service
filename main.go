@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	
+	"catalog-bff-service/src/admin"
 	"catalog-bff-service/src/domain"
 	"catalog-bff-service/src/handler"
 	"catalog-bff-service/src/infrastructure/cache"
@@ -36,6 +37,8 @@ func main() {
 	pimServiceURL := getEnv("PIM_SERVICE_URL", "http://localhost:8090")
 	stockServiceURL := getEnv("STOCK_SERVICE_URL", "http://localhost:8100")
 	tenantServiceURL := getEnv("TENANT_SERVICE_URL", "")
+	scraperServiceURL := getEnv("SCRAPER_SERVICE_URL", "http://localhost:8086")
+	iamServiceURL := getEnv("IAM_SERVICE_URL", "http://localhost:8080")
 
 	// Configuración de cache (TTLs configurables por env)
 	tenantConfigTTL := parseDuration(getEnv("TENANT_CONFIG_CACHE_TTL", "60s"), 60*time.Second)
@@ -77,6 +80,10 @@ func main() {
 	productHandler := handler.NewProductHandler(pimServiceURL)
 	variantHandler := handler.NewProductVariantHandler(pimServiceURL, cachedStockClient)
 
+	// Handler para admin dashboard
+	dashboardService := admin.NewDashboardService(pimServiceURL, scraperServiceURL, iamServiceURL, tenantServiceURL)
+	adminHandler := admin.NewHandler(dashboardService)
+
 	// API v1
 	v1 := router.Group("/api/v1")
 	{
@@ -106,6 +113,12 @@ func main() {
 			backoffice.PUT("/products/:id/variants/:variant_id", variantHandler.UpdateVariant)
 			backoffice.PATCH("/products/:id/variants/:variant_id/status", variantHandler.ToggleVariantStatus)
 		}
+
+		// Endpoints de administración (dashboard, métricas)
+		adminGroup := v1.Group("/admin")
+		{
+			adminGroup.GET("/dashboard/stats", adminHandler.GetDashboardStats)
+		}
 	}
 	
 	log.Println("Rutas disponibles:")
@@ -125,10 +138,15 @@ func main() {
 	log.Println("  PUT    /api/v1/backoffice/products/:id/variants/:variant_id")
 	log.Println("  PATCH  /api/v1/backoffice/products/:id/variants/:variant_id/status")
 	log.Println("")
+	log.Println("📊 Admin (Dashboard y Métricas):")
+	log.Println("  GET    /api/v1/admin/dashboard/stats")
+	log.Println("")
 	log.Println("Configuración:")
 	log.Printf("  PIM_SERVICE_URL: %s", pimServiceURL)
 	log.Printf("  STOCK_SERVICE_URL: %s", stockServiceURL)
 	log.Printf("  TENANT_SERVICE_URL: %s", tenantServiceURL)
+	log.Printf("  SCRAPER_SERVICE_URL: %s", scraperServiceURL)
+	log.Printf("  IAM_SERVICE_URL: %s", iamServiceURL)
 	log.Printf("  Cache: tenant_config=%s, stock=%s", tenantConfigTTL, stockAvailabilityTTL)
 
 	port := getEnv("PORT", "8085")

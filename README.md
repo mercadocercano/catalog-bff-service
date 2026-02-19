@@ -32,7 +32,56 @@ Frontend → catalog-service → [PIM + Stock] → Response unificada
 
 ---
 
-## HITO 1: Variante + Stock
+## 📊 Endpoints Disponibles
+
+### 1. Admin Dashboard Stats
+
+Endpoint agregado que consolida métricas de múltiples servicios para el dashboard de administración.
+
+```
+GET /api/v1/admin/dashboard/stats
+```
+
+**Headers:**
+- `Authorization`: Bearer token JWT (obligatorio)
+
+**Respuesta (200 OK):**
+```json
+{
+  "curation": {
+    "pending": 12,
+    "approved_today": 5,
+    "rejected_today": 2,
+    "total_scraped": 1543
+  },
+  "catalog": {
+    "total_products": 2341,
+    "total_variants": 8923,
+    "active_products": 2103,
+    "categories_count": 45,
+    "top_categories": [...]
+  },
+  "tenants": {
+    "total": 15,
+    "active": 14,
+    "new_this_month": 3,
+    "recent": [...]
+  },
+  "services": [...]
+}
+```
+
+**Servicios orquestados:**
+- PIM Service (curación y catálogo)
+- Scraper Service (productos scrapeados)
+- Tenant Service (tenants activos)
+- Health checks de todos los servicios
+
+**Documentación completa:** Ver [DASHBOARD_ENDPOINT.md](./DASHBOARD_ENDPOINT.md)
+
+---
+
+### 2. HITO 1: Variante + Stock
 
 Endpoint que agrega datos de PIM y Stock para consultas unificadas.
 
@@ -76,6 +125,8 @@ GET /api/v1/catalog/variants/{variant_id}
 - `PIM_SERVICE_URL`: URL del PIM service (default: `http://localhost:8090`)
 - `STOCK_SERVICE_URL`: URL del Stock service (default: `http://localhost:8100`)
 - `TENANT_SERVICE_URL`: URL del Tenant service (opcional)
+- `SCRAPER_SERVICE_URL`: URL del Scraper service (default: `http://localhost:8086`)
+- `IAM_SERVICE_URL`: URL del IAM service (default: `http://localhost:8080`)
 - `PORT`: Puerto del servicio (default: `8085`)
 
 **Cache (opcional):**
