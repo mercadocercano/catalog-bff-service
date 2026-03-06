@@ -2,7 +2,7 @@
 
 ## Contexto
 
-En el **HITO 1** del proyecto SaaS Multi-Tenant "Tienda Vecina", se necesitaba exponer un endpoint que combinara datos de **producto/variante** (PIM) con **stock disponible** (Stock Service) en una sola respuesta consumible por frontends.
+En el **HITO 1** del proyecto SaaS Multi-Tenant "Mercado Cercano", se necesitaba exponer un endpoint que combinara datos de **producto/variante** (PIM) con **stock disponible** (Stock Service) en una sola respuesta consumible por frontends.
 
 ## Problema
 

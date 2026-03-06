@@ -335,4 +335,4 @@ La integración está **completa y funcional**. El `catalog-bff-service` ahora:
 
 **Fecha de Implementación:** 2026-02-03  
 **Versión:** 1.0.0  
-**Autor:** SaaS MT Team - Tienda Vecina
+**Autor:** SaaS MT Team - Mercado Cercano
