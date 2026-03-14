@@ -2,8 +2,8 @@ package test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -24,7 +24,7 @@ func MockPIMServer() *httptest.Server {
 	// Mock: Listar productos
 	router.GET("/api/v1/products", func(c *gin.Context) {
 		c.JSON(http.StatusOK, dto.PIMProductListResponse{
-			Items: []dto.PIMProductItem{
+			Products: []dto.PIMProductItem{
 				{
 					ID:         "prod-001",
 					Name:       "Producto Test 1",
@@ -40,10 +40,12 @@ func MockPIMServer() *httptest.Server {
 					Status:     "draft",
 				},
 			},
-			TotalCount: 2,
-			Page:       1,
-			PageSize:   20,
-			TotalPages: 1,
+			Pagination: dto.PIMPagination{
+				Page:       1,
+				PageSize:   20,
+				TotalItems: 2,
+				TotalPages: 1,
+			},
 		})
 	})
 
@@ -104,19 +106,24 @@ func MockPIMServer() *httptest.Server {
 	})
 
 	// Mock: Listar variantes de un producto
-	router.GET("/api/v1/products/:product_id/variants", func(c *gin.Context) {
-		productID := c.Param("product_id")
+	router.GET("/api/v1/products/:id/variants", func(c *gin.Context) {
+		productID := c.Param("id")
 
 		if productID == "prod-001" {
-			c.JSON(http.StatusOK, []dto.PIMVariantResponse{
-				{
-					ID:        "var-001",
-					ProductID: productID,
-					Name:      "Variante 1",
-					SKU:       "TEST-SKU-001",
-					Price:     1500.00,
-					IsDefault: true,
-					Status:    "active",
+			c.JSON(http.StatusOK, gin.H{
+				"variants": []dto.PIMVariantResponse{
+					{
+						ID:        "var-001",
+						ProductID: productID,
+						Name:      "Variante 1",
+						SKU:       "TEST-SKU-001",
+						Price:     1500.00,
+						IsDefault: true,
+						Status:    "active",
+					},
+				},
+				"pagination": gin.H{
+					"page": 1, "page_size": 20, "total_items": 1, "total_pages": 1,
 				},
 			})
 		} else {
@@ -125,8 +132,8 @@ func MockPIMServer() *httptest.Server {
 	})
 
 	// Mock: Crear variante
-	router.POST("/api/v1/products/:product_id/variants", func(c *gin.Context) {
-		productID := c.Param("product_id")
+	router.POST("/api/v1/products/:id/variants", func(c *gin.Context) {
+		productID := c.Param("id")
 
 		var req dto.CreateVariantRequest
 		if err := c.ShouldBindJSON(&req); err != nil {
@@ -155,7 +162,7 @@ func MockPIMServer() *httptest.Server {
 // MockStockClient implementa StockAvailabilityClient para testing
 type MockStockClient struct{}
 
-func (m *MockStockClient) GetAvailability(sku, tenantID string) (*client.StockAvailability, error) {
+func (m *MockStockClient) GetAvailability(ctx context.Context, tenantID, sku string) (*client.StockAvailability, error) {
 	return &client.StockAvailability{
 		ProductSKU:        sku,
 		AvailableQuantity: 100,
@@ -321,7 +328,7 @@ func TestProductHandlerUpdateProduct(t *testing.T) {
 
 	// Test: Actualizar producto existente
 	t.Run("Actualizar producto existente", func(t *testing.T) {
-		updateReq := dto.UpdateProductData{
+		updateReq := dto.UpdateProductRequest{
 			Name:        "Producto Actualizado",
 			Description: "Nueva descripción",
 			Status:      "inactive",
@@ -357,7 +364,7 @@ func TestVariantHandlerListVariants(t *testing.T) {
 	variantHandler := handler.NewProductVariantHandler(mockPIM.URL, mockStockClient)
 
 	router := gin.New()
-	router.GET("/api/v1/backoffice/products/:product_id/variants", variantHandler.ListProductVariants)
+	router.GET("/api/v1/backoffice/products/:id/variants", variantHandler.ListProductVariants)
 
 	// Test
 	req := httptest.NewRequest("GET", "/api/v1/backoffice/products/prod-001/variants", nil)
@@ -394,7 +401,7 @@ func TestVariantHandlerCreateVariant(t *testing.T) {
 	variantHandler := handler.NewProductVariantHandler(mockPIM.URL, mockStockClient)
 
 	router := gin.New()
-	router.POST("/api/v1/backoffice/products/:product_id/variants", variantHandler.CreateVariant)
+	router.POST("/api/v1/backoffice/products/:id/variants", variantHandler.CreateVariant)
 
 	// Test: Crear variante válida
 	t.Run("Crear variante válida", func(t *testing.T) {
