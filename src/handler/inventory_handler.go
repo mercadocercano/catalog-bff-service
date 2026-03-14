@@ -112,15 +112,18 @@ func (h *InventoryHandler) fetchAndMerge(c *gin.Context, tenantID string) ([]dto
 		skus = append(skus, item.ProductSKU)
 	}
 
-	pimData, err := h.fetchPIMVariantsBySKUs(c, tenantID, skus)
+	// Expandir SKUs: el quickstart crea stock con product.sku (ej: ALMACEN-001)
+	// pero PIM guarda variantes con sku = product.sku + "-DEF" (ej: ALMACEN-001-DEF)
+	skusForPIM := expandSKUsForPIMLookup(skus)
+
+	pimData, err := h.fetchPIMVariantsBySKUs(c, tenantID, skusForPIM)
 	if err != nil {
 		return nil, fmt.Errorf("pim-service: %w", err)
 	}
 
-	pimMap := make(map[string]*dto.PIMEnrichedVariant, len(pimData))
-	for i := range pimData {
-		pimMap[pimData[i].SKU] = &pimData[i]
-	}
+	// pimMap: clave = SKU de stock para lookup. Incluir tanto SKU exacto como base (sin -DEF)
+	// para que stock con "ALMACEN-001" encuentre variante "ALMACEN-001-DEF"
+	pimMap := buildPIMLookupMap(pimData, skus)
 
 	items := make([]dto.InventoryItem, 0, len(stockItems))
 	for _, stock := range stockItems {
@@ -138,7 +141,11 @@ func (h *InventoryHandler) fetchAndMerge(c *gin.Context, tenantID string) ([]dto
 			item.SalePrice = pim.Price
 			item.StockValue = pim.Price * stock.AvailableQuantity
 		} else {
-			item.ProductName = "Producto desconocido"
+			// Fallback: usar product_name de stock si está disponible (ej: bulk create con product_name)
+			item.ProductName = stock.ProductName
+			if item.ProductName == "" {
+				item.ProductName = "Producto desconocido"
+			}
 			item.CategoryName = "-"
 		}
 
@@ -146,6 +153,50 @@ func (h *InventoryHandler) fetchAndMerge(c *gin.Context, tenantID string) ([]dto
 	}
 
 	return items, nil
+}
+
+// expandSKUsForPIMLookup agrega variantes -DEF para lookup en PIM.
+// El quickstart crea stock con product.sku (ALMACEN-001) pero PIM guarda variantes con sku+'-DEF'.
+func expandSKUsForPIMLookup(skus []string) []string {
+	seen := make(map[string]bool)
+	result := make([]string, 0, len(skus)*2)
+	for _, s := range skus {
+		if s == "" {
+			continue
+		}
+		if !seen[s] {
+			seen[s] = true
+			result = append(result, s)
+		}
+		defSku := s + "-DEF"
+		if !seen[defSku] {
+			seen[defSku] = true
+			result = append(result, defSku)
+		}
+	}
+	return result
+}
+
+// buildPIMLookupMap construye un mapa para lookup: stock SKU -> variante PIM.
+// Permite que stock con "ALMACEN-001" encuentre variante "ALMACEN-001-DEF".
+func buildPIMLookupMap(pimData []dto.PIMEnrichedVariant, stockSKUs []string) map[string]*dto.PIMEnrichedVariant {
+	stockSet := make(map[string]bool)
+	for _, s := range stockSKUs {
+		stockSet[s] = true
+	}
+	result := make(map[string]*dto.PIMEnrichedVariant, len(pimData)*2)
+	for i := range pimData {
+		v := &pimData[i]
+		result[v.SKU] = v
+		// Si la variante tiene sufijo -DEF, mapear también la base (sin -DEF) para stock del quickstart
+		if strings.HasSuffix(v.SKU, "-DEF") {
+			base := strings.TrimSuffix(v.SKU, "-DEF")
+			if stockSet[base] {
+				result[base] = v
+			}
+		}
+	}
+	return result
 }
 
 // fetchAllStock gets all stock availability for the tenant (paginated internally, returns all)

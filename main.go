@@ -13,6 +13,7 @@ import (
 	"catalog-bff-service/src/infrastructure/cache"
 	"catalog-bff-service/src/infrastructure/stock/client"
 	tenantclient "catalog-bff-service/src/infrastructure/tenant/client"
+	tenant_dashboard "catalog-bff-service/src/tenant_dashboard"
 )
 
 func getEnv(key, defaultValue string) string {
@@ -87,6 +88,10 @@ func main() {
 	dashboardService := admin.NewDashboardService(pimServiceURL, scraperServiceURL, iamServiceURL, tenantServiceURL)
 	adminHandler := admin.NewHandler(dashboardService)
 
+	// Handler para tenant dashboard (orquesta PIM + Stock con scope de tenant)
+	tenantDashboardService := tenant_dashboard.NewService(pimServiceURL, stockServiceURL)
+	tenantDashboardHandler := tenant_dashboard.NewHandler(tenantDashboardService)
+
 	// API v1
 	v1 := router.Group("/api/v1")
 	{
@@ -129,6 +134,12 @@ func main() {
 		{
 			adminGroup.GET("/dashboard/stats", adminHandler.GetDashboardStats)
 		}
+
+		// Endpoints de tenant dashboard (PIM + Stock orquestado por tenant)
+		tenantGroup := v1.Group("/tenant")
+		{
+			tenantGroup.GET("/dashboard", tenantDashboardHandler.GetDashboard)
+		}
 	}
 	
 	log.Println("Rutas disponibles:")
@@ -154,6 +165,9 @@ func main() {
 	log.Println("")
 	log.Println("📊 Admin (Dashboard y Métricas):")
 	log.Println("  GET    /api/v1/admin/dashboard/stats")
+	log.Println("")
+	log.Println("🏠 Tenant Dashboard (PIM + Stock por tenant):")
+	log.Println("  GET    /api/v1/tenant/dashboard")
 	log.Println("")
 	log.Println("Configuración:")
 	log.Printf("  PIM_SERVICE_URL: %s", pimServiceURL)
