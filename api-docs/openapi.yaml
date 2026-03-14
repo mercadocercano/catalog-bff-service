@@ -1,0 +1,1150 @@
+openapi: 3.1.0
+info:
+  title: Catalog BFF Service API
+  version: 1.0.0
+  description: |
+    BFF que orquesta datos de PIM, Stock y Tenant services para el backoffice.
+    
+    ## Módulos
+    - **Catálogo**: Lectura agregada de variantes con stock
+    - **Backoffice**: CRUD de productos y variantes
+    - **Inventario**: Listado y resumen orquestado (Stock + PIM)
+    - **Admin**: Dashboard y métricas del marketplace
+
+servers:
+  - url: /
+    description: Base URL
+  - url: http://localhost:8085
+    description: Servidor local de desarrollo
+  - url: http://localhost:8001/catalog-bff
+    description: A través de Kong API Gateway
+
+tags:
+  - name: Inventory
+    description: Inventario orquestado (Stock + PIM)
+  - name: Backoffice
+    description: CRUD de productos y variantes
+  - name: Catalog
+    description: Catálogo de lectura agregada
+  - name: Admin
+    description: Dashboard y métricas
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT para autenticación
+    TenantId:
+      type: apiKey
+      in: header
+      name: X-Tenant-ID
+      description: UUID del tenant para operaciones multi-tenant
+
+  security:
+    - BearerAuth: []
+    - TenantId: []
+
+  schemas:
+    # --- Inventario ---
+    InventoryItem:
+      type: object
+      description: Item de inventario (Stock + PIM enriquecido)
+      properties:
+        variant_sku:
+          type: string
+          description: SKU de la variante
+        product_name:
+          type: string
+          description: Nombre del producto
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+          description: ID de categoría (null si sin categoría)
+        category_name:
+          type: string
+          description: Nombre de la categoría
+        available_quantity:
+          type: number
+          format: double
+          description: Cantidad disponible
+        reserved_quantity:
+          type: number
+          format: double
+          description: Cantidad reservada
+        last_entry_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Fecha de última entrada
+        sale_price:
+          type: number
+          format: double
+          description: Precio de venta
+        stock_value:
+          type: number
+          format: double
+          description: Valor del stock (precio × cantidad)
+
+    InventoryListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryItem'
+        total_count:
+          type: integer
+          description: Total de items que coinciden con los filtros
+        page:
+          type: integer
+          description: Página actual
+        page_size:
+          type: integer
+          description: Tamaño de página
+        total_pages:
+          type: integer
+          description: Total de páginas
+
+    InventoryTotals:
+      type: object
+      properties:
+        total_skus:
+          type: integer
+          description: Total de SKUs en inventario
+        total_available:
+          type: number
+          format: double
+          description: Suma de cantidades disponibles
+        total_reserved:
+          type: number
+          format: double
+          description: Suma de cantidades reservadas
+        total_stock_value:
+          type: number
+          format: double
+          description: Valor total del stock
+
+    InventoryCategoryTotal:
+      type: object
+      properties:
+        category_id:
+          type: string
+          format: uuid
+          nullable: true
+        category_name:
+          type: string
+        sku_count:
+          type: integer
+        available_quantity:
+          type: number
+          format: double
+        reserved_quantity:
+          type: number
+          format: double
+        stock_value:
+          type: number
+          format: double
+
+    InventorySummaryResponse:
+      type: object
+      properties:
+        totals:
+          $ref: '#/components/schemas/InventoryTotals'
+        by_category:
+          type: array
+          items:
+            $ref: '#/components/schemas/InventoryCategoryTotal'
+
+    # --- Catálogo ---
+    CatalogVariantResponse:
+      type: object
+      description: Variante con stock agregado
+      properties:
+        variant_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        product_name:
+          type: string
+        variant_name:
+          type: string
+        sku:
+          type: string
+        is_default:
+          type: boolean
+        stock:
+          $ref: '#/components/schemas/StockInfo'
+
+    StockInfo:
+      type: object
+      properties:
+        available:
+          type: number
+          format: double
+        reserved:
+          type: number
+          format: double
+        total:
+          type: number
+          format: double
+
+    SellableVariantResponse:
+      type: object
+      properties:
+        variant_id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        variant_name:
+          type: string
+        sku:
+          type: string
+        is_default:
+          type: boolean
+        available_quantity:
+          type: number
+          format: double
+        reserved_quantity:
+          type: number
+          format: double
+        is_sellable:
+          type: boolean
+          description: Si la variante es vendible según Stock Policy del tenant
+
+    SellableVariantsListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/SellableVariantResponse'
+        total_count:
+          type: integer
+
+    # --- Backoffice Productos ---
+    ProductSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        category_name:
+          type: string
+        brand_name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, draft, archived]
+        variants_count:
+          type: integer
+        has_active_stock:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ProductListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductSummary'
+        total_count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total_pages:
+          type: integer
+
+    VariantSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: string
+        price:
+          type: number
+          format: double
+        is_default:
+          type: boolean
+        is_active:
+          type: boolean
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantAttribute'
+        stock:
+          $ref: '#/components/schemas/StockInfo'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    VariantAttribute:
+      type: object
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+
+    ProductDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        category_id:
+          type: string
+          format: uuid
+        category_name:
+          type: string
+        brand_id:
+          type: string
+          format: uuid
+        brand_name:
+          type: string
+        status:
+          type: string
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantSummary'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    CreateProductRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        category_id:
+          type: string
+          format: uuid
+        brand_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, inactive, draft]
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/CreateVariantRequest'
+
+    CreateVariantRequest:
+      type: object
+      required: [name, sku, price]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 100
+        price:
+          type: number
+          format: double
+          minimum: 0
+        is_default:
+          type: boolean
+          default: false
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantAttribute'
+
+    UpdateProductRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 255
+        description:
+          type: string
+          maxLength: 2000
+        category_id:
+          type: string
+          format: uuid
+        brand_id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, inactive, draft, archived]
+        variants:
+          type: array
+          items:
+            $ref: '#/components/schemas/UpdateVariantInRequest'
+
+    UpdateVariantInRequest:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: string
+        price:
+          type: number
+          format: double
+        stock:
+          type: integer
+        is_active:
+          type: boolean
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantAttribute'
+
+    UpdateVariantRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 100
+        price:
+          type: number
+          format: double
+          minimum: 0
+        is_default:
+          type: boolean
+        attributes:
+          type: array
+          items:
+            $ref: '#/components/schemas/VariantAttribute'
+
+    ToggleVariantStatusRequest:
+      type: object
+      properties:
+        is_active:
+          type: boolean
+          description: true para activar, false para desactivar
+
+    ProductCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    VariantCreatedResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        product_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        sku:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    # --- Admin Dashboard ---
+    DashboardStatsResponse:
+      type: object
+      properties:
+        curation:
+          $ref: '#/components/schemas/CurationStats'
+        catalog:
+          $ref: '#/components/schemas/CatalogStats'
+        tenants:
+          $ref: '#/components/schemas/TenantStats'
+        services:
+          type: array
+          items:
+            $ref: '#/components/schemas/ServiceHealth'
+
+    CurationStats:
+      type: object
+      properties:
+        pending:
+          type: integer
+          description: Productos pendientes de aprobación
+        approved_today:
+          type: integer
+        rejected_today:
+          type: integer
+        total_scraped:
+          type: integer
+
+    CatalogStats:
+      type: object
+      properties:
+        total_products:
+          type: integer
+        total_variants:
+          type: integer
+        active_products:
+          type: integer
+        categories_count:
+          type: integer
+        top_categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryCount'
+
+    CategoryCount:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        count:
+          type: integer
+
+    TenantStats:
+      type: object
+      properties:
+        total:
+          type: integer
+        active:
+          type: integer
+        new_this_month:
+          type: integer
+        recent:
+          type: array
+          items:
+            $ref: '#/components/schemas/TenantInfo'
+
+    TenantInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        plan:
+          type: string
+        status:
+          type: string
+        last_activity:
+          type: string
+
+    ServiceHealth:
+      type: object
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+          enum: [up, down, degraded]
+        latency_ms:
+          type: integer
+          format: int64
+        uptime_percent:
+          type: number
+          format: double
+        last_check:
+          type: string
+          format: date-time
+
+    # --- Errores ---
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Código de error
+        message:
+          type: string
+          description: Mensaje legible
+        details:
+          type: object
+          additionalProperties:
+            type: string
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      description: Verifica que el servicio esté operativo
+      operationId: getHealth
+      tags: []
+      security: []
+      responses:
+        '200':
+          description: Servicio saludable
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: healthy
+                  service:
+                    type: string
+                    example: catalog-bff-service
+
+  /api/v1/inventory:
+    get:
+      summary: Listar inventario
+      description: Listado de inventario orquestado (Stock + PIM) con filtros y paginación
+      operationId: listInventory
+      tags: [Inventory]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+          description: Número de página
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+          description: Tamaño de página
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Búsqueda por nombre de producto o SKU
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filtrar por ID de categoría
+        - name: min_available
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Cantidad mínima disponible
+        - name: max_available
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Cantidad máxima disponible
+        - name: min_price
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Precio mínimo
+        - name: max_price
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Precio máximo
+        - name: last_movement_from
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Fecha desde (YYYY-MM-DD) última entrada
+        - name: last_movement_to
+          in: query
+          schema:
+            type: string
+            format: date
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+          description: Fecha hasta (YYYY-MM-DD) última entrada
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum:
+              - variant_sku
+              - product_name
+              - category_name
+              - available_quantity
+              - reserved_quantity
+              - last_entry_at
+              - sale_price
+              - stock_value
+            default: variant_sku
+          description: Campo de ordenamiento
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+          description: Dirección de ordenamiento
+      responses:
+        '200':
+          description: Lista de items de inventario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryListResponse'
+        '400':
+          description: X-Tenant-ID faltante o parámetros inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error de orquestación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/inventory/summary:
+    get:
+      summary: Resumen de inventario
+      description: Totalizador y desglose por categoría del inventario
+      operationId: getInventorySummary
+      tags: [Inventory]
+      responses:
+        '200':
+          description: Resumen de inventario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventorySummaryResponse'
+        '400':
+          description: X-Tenant-ID faltante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Error de orquestación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/catalog/variants/{id}:
+    get:
+      summary: Obtener variante con stock
+      description: Obtiene una variante por ID con información de stock agregada (PIM + Stock)
+      operationId: getVariantWithStock
+      tags: [Catalog]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Variante con stock
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogVariantResponse'
+        '400':
+          description: X-Tenant-ID faltante
+        '502':
+          description: PIM o Stock no disponible
+
+  /api/v1/catalog/sellable-variants:
+    get:
+      summary: Variantes vendibles
+      description: Catálogo de variantes con stock y flag is_sellable según Stock Policy del tenant
+      operationId: getSellableVariants
+      tags: [Catalog]
+      responses:
+        '200':
+          description: Lista de variantes vendibles
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SellableVariantsListResponse'
+        '400':
+          description: X-Tenant-ID faltante
+        '502':
+          description: PIM o Stock no disponible
+
+  /api/v1/backoffice/products:
+    get:
+      summary: Listar productos
+      description: Lista productos con filtros y paginación
+      operationId: listProducts
+      tags: [Backoffice]
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: brand_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, inactive, draft, archived]
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [name, created_at, updated_at]
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+      responses:
+        '200':
+          description: Lista de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductListResponse'
+        '400':
+          description: Parámetros inválidos o X-Tenant-ID faltante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    post:
+      summary: Crear producto
+      description: Crea un nuevo producto con variantes opcionales
+      operationId: createProduct
+      tags: [Backoffice]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProductRequest'
+      responses:
+        '201':
+          description: Producto creado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductCreatedResponse'
+        '400':
+          description: Datos inválidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: PIM no disponible
+
+  /api/v1/backoffice/products/{id}:
+    get:
+      summary: Obtener producto
+      description: Obtiene el detalle de un producto con sus variantes
+      operationId: getProduct
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle del producto
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductDetailResponse'
+        '400':
+          description: X-Tenant-ID faltante
+        '404':
+          description: Producto no encontrado
+    put:
+      summary: Actualizar producto
+      description: Actualiza un producto existente
+      operationId: updateProduct
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProductRequest'
+      responses:
+        '200':
+          description: Producto actualizado
+        '400':
+          description: Datos inválidos
+        '404':
+          description: Producto no encontrado
+        '502':
+          description: PIM no disponible
+
+  /api/v1/backoffice/products/{id}/variants:
+    get:
+      summary: Listar variantes de producto
+      description: Lista las variantes de un producto
+      operationId: listProductVariants
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: Lista de variantes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VariantSummary'
+                  total_count:
+                    type: integer
+                  page:
+                    type: integer
+                  page_size:
+                    type: integer
+                  total_pages:
+                    type: integer
+        '400':
+          description: X-Tenant-ID faltante
+        '404':
+          description: Producto no encontrado
+    post:
+      summary: Crear variante
+      description: Crea una nueva variante para un producto
+      operationId: createVariant
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVariantRequest'
+      responses:
+        '201':
+          description: Variante creada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantCreatedResponse'
+        '400':
+          description: Datos inválidos
+        '404':
+          description: Producto no encontrado
+        '502':
+          description: PIM no disponible
+
+  /api/v1/backoffice/products/{id}/variants/{variant_id}:
+    get:
+      summary: Obtener variante
+      description: Obtiene el detalle de una variante
+      operationId: getVariant
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle de la variante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VariantSummary'
+        '400':
+          description: X-Tenant-ID faltante
+        '404':
+          description: Producto o variante no encontrado
+    put:
+      summary: Actualizar variante
+      description: Actualiza una variante existente
+      operationId: updateVariant
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVariantRequest'
+      responses:
+        '200':
+          description: Variante actualizada
+        '400':
+          description: Datos inválidos
+        '404':
+          description: Producto o variante no encontrado
+        '502':
+          description: PIM no disponible
+
+  /api/v1/backoffice/products/{id}/variants/{variant_id}/status:
+    patch:
+      summary: Activar/desactivar variante
+      description: Cambia el estado activo/inactivo de una variante
+      operationId: toggleVariantStatus
+      tags: [Backoffice]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: variant_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToggleVariantStatusRequest'
+      responses:
+        '200':
+          description: Estado actualizado
+        '400':
+          description: Datos inválidos
+        '404':
+          description: Producto o variante no encontrado
+        '502':
+          description: PIM no disponible
+
+  /api/v1/admin/dashboard/stats:
+    get:
+      summary: Estadísticas del dashboard
+      description: Métricas consolidadas de curación, catálogo, tenants y salud de servicios
+      operationId: getDashboardStats
+      tags: [Admin]
+      responses:
+        '200':
+          description: Estadísticas del dashboard
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardStatsResponse'
+        '500':
+          description: Error al obtener estadísticas

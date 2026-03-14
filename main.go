@@ -80,6 +80,9 @@ func main() {
 	productHandler := handler.NewProductHandler(pimServiceURL)
 	variantHandler := handler.NewProductVariantHandler(pimServiceURL, cachedStockClient)
 
+	// Handler de inventario (orquesta Stock + PIM)
+	inventoryHandler := handler.NewInventoryHandler(stockServiceURL, pimServiceURL)
+
 	// Handler para admin dashboard
 	dashboardService := admin.NewDashboardService(pimServiceURL, scraperServiceURL, iamServiceURL, tenantServiceURL)
 	adminHandler := admin.NewHandler(dashboardService)
@@ -114,6 +117,13 @@ func main() {
 			backoffice.PATCH("/products/:id/variants/:variant_id/status", variantHandler.ToggleVariantStatus)
 		}
 
+		// Endpoints de inventario (Stock + PIM orquestado)
+		inventory := v1.Group("/inventory")
+		{
+			inventory.GET("", inventoryHandler.ListInventory)
+			inventory.GET("/summary", inventoryHandler.GetInventorySummary)
+		}
+
 		// Endpoints de administración (dashboard, métricas)
 		adminGroup := v1.Group("/admin")
 		{
@@ -137,6 +147,10 @@ func main() {
 	log.Println("  POST   /api/v1/backoffice/products/:id/variants")
 	log.Println("  PUT    /api/v1/backoffice/products/:id/variants/:variant_id")
 	log.Println("  PATCH  /api/v1/backoffice/products/:id/variants/:variant_id/status")
+	log.Println("")
+	log.Println("📦 Inventario (Stock + PIM Orquestado):")
+	log.Println("  GET    /api/v1/inventory")
+	log.Println("  GET    /api/v1/inventory/summary")
 	log.Println("")
 	log.Println("📊 Admin (Dashboard y Métricas):")
 	log.Println("  GET    /api/v1/admin/dashboard/stats")
