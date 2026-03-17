@@ -2,11 +2,9 @@ module catalog-bff-service
 
 go 1.21
 
-replace github.com/mercadocercano/middleware => ../../libs/middleware
-
 require (
 	github.com/gin-gonic/gin v1.9.1
-	github.com/mercadocercano/middleware v0.0.0
+	github.com/mercadocercano/middleware v0.1.0
 	github.com/stretchr/testify v1.8.3
 )
 
