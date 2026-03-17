@@ -6,7 +6,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	
+	tenantmw "github.com/mercadocercano/middleware"
+
 	"catalog-bff-service/src/admin"
 	"catalog-bff-service/src/domain"
 	"catalog-bff-service/src/handler"
@@ -28,6 +29,13 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+	router.Use(tenantmw.TenantValidation(tenantmw.TenantValidationConfig{
+		JWTSecret: os.Getenv("JWT_SECRET"),
+		ExcludedRoutes: []string{
+			"/health",
+			"/metrics",
+		},
+	}))
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
