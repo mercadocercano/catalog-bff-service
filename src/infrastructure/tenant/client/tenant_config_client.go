@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 )
 
@@ -13,10 +14,11 @@ type TenantConfigClient interface {
 	GetConfig(ctx context.Context, tenantID string, key string) (string, error)
 }
 
-// HTTPTenantConfigClient implementa el client HTTP para tenant-service
+// HTTPTenantConfigClient implementa el client HTTP para tenant-service (S2S)
 type HTTPTenantConfigClient struct {
 	baseURL    string
 	httpClient *http.Client
+	apiKey     string
 }
 
 // TenantConfigResponse representa la respuesta del tenant-service
@@ -25,13 +27,16 @@ type TenantConfigResponse struct {
 	Value *string `json:"value"` // Nullable para indicar que no existe
 }
 
-// NewHTTPTenantConfigClient crea una nueva instancia del client
+// NewHTTPTenantConfigClient crea una nueva instancia del client con autenticación S2S
 func NewHTTPTenantConfigClient(baseURL string) TenantConfigClient {
+	apiKey := os.Getenv("S2S_API_KEY")
+
 	return &HTTPTenantConfigClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 500 * time.Millisecond, // Timeout agresivo para no bloquear el BFF
 		},
+		apiKey: apiKey,
 	}
 }
 
@@ -51,6 +56,10 @@ func (c *HTTPTenantConfigClient) GetConfig(ctx context.Context, tenantID string,
 	}
 
 	req.Header.Set("X-Tenant-ID", tenantID)
+	// Autenticación S2S via API Key
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

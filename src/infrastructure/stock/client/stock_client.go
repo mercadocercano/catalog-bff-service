@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"catalog-bff-service/src/domain"
@@ -32,19 +33,23 @@ type StockAvailabilityClient interface {
 	GetAvailability(ctx context.Context, tenantID string, sku string) (*StockAvailability, error)
 }
 
-// HTTPStockAvailabilityClient implementa el client HTTP para stock-service
+// HTTPStockAvailabilityClient implementa el client HTTP para stock-service (S2S)
 type HTTPStockAvailabilityClient struct {
 	baseURL    string
 	httpClient *http.Client
+	apiKey     string
 }
 
-// NewHTTPStockAvailabilityClient crea un client HTTP sin cache
+// NewHTTPStockAvailabilityClient crea un client HTTP con autenticación S2S
 func NewHTTPStockAvailabilityClient(baseURL string) StockAvailabilityClient {
+	apiKey := os.Getenv("S2S_API_KEY")
+
 	return &HTTPStockAvailabilityClient{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 500 * time.Millisecond, // Timeout agresivo
 		},
+		apiKey: apiKey,
 	}
 }
 
@@ -58,6 +63,10 @@ func (c *HTTPStockAvailabilityClient) GetAvailability(ctx context.Context, tenan
 	}
 
 	req.Header.Set("X-Tenant-ID", tenantID)
+	// Autenticación S2S via API Key
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
