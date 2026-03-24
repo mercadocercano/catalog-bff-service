@@ -248,14 +248,11 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	// Mapear a request de PIM
 	pimReq := h.mapToPIMCreateRequest(req)
 
-	log.Printf("📦 Creating product with %d variants", len(req.Variants))
-	log.Printf("📦 Request variants: %+v", req.Variants)
+	log.Printf("Creating product with %d variants", len(req.Variants))
 
 	// Llamar a PIM Service
 	pimURL := fmt.Sprintf("%s/api/v1/products", h.pimServiceURL)
 	body, _ := json.Marshal(pimReq)
-	
-	log.Printf("📤 PIM Request: %s", string(body))
 
 	httpReq, err := http.NewRequest("POST", pimURL, bytes.NewBuffer(body))
 	if err != nil {
