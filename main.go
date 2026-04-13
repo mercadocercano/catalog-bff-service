@@ -35,6 +35,7 @@ func main() {
 			"/health",
 			"/api/v1/health",
 			"/metrics",
+			"/api/v1/marketplace*",
 		},
 	}))
 
@@ -47,7 +48,6 @@ func main() {
 	pimServiceURL := getEnv("PIM_SERVICE_URL", "http://localhost:8090")
 	stockServiceURL := getEnv("STOCK_SERVICE_URL", "http://localhost:8100")
 	tenantServiceURL := getEnv("TENANT_SERVICE_URL", "")
-	scraperServiceURL := getEnv("SCRAPER_SERVICE_URL", "http://localhost:8086")
 	iamServiceURL := getEnv("IAM_SERVICE_URL", "http://localhost:8080")
 
 	// Configuración de cache (TTLs configurables por env)
@@ -94,12 +94,15 @@ func main() {
 	inventoryHandler := handler.NewInventoryHandler(stockServiceURL, pimServiceURL)
 
 	// Handler para admin dashboard
-	dashboardService := admin.NewDashboardService(pimServiceURL, scraperServiceURL, iamServiceURL, tenantServiceURL)
+	dashboardService := admin.NewDashboardService(pimServiceURL, iamServiceURL, tenantServiceURL)
 	adminHandler := admin.NewHandler(dashboardService)
 
 	// Handler para tenant dashboard (orquesta PIM + Stock con scope de tenant)
 	tenantDashboardService := tenant_dashboard.NewService(pimServiceURL, stockServiceURL)
 	tenantDashboardHandler := tenant_dashboard.NewHandler(tenantDashboardService)
+
+	// Handler para marketplace (cross-tenant, endpoints públicos)
+	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, tenantServiceURL)
 
 	// API v1
 	v1 := router.Group("/api/v1")
@@ -149,6 +152,19 @@ func main() {
 		{
 			tenantGroup.GET("/dashboard", tenantDashboardHandler.GetDashboard)
 		}
+
+		// Endpoints del marketplace (cross-tenant, públicos)
+		marketplace := v1.Group("/marketplace")
+		{
+			marketplace.GET("/store-types", marketplaceHandler.ListStoreTypes)
+			marketplace.GET("/products", marketplaceHandler.ListProducts)
+			marketplace.GET("/products/:id", marketplaceHandler.GetProduct)
+			marketplace.GET("/products/by-store-type/:code", marketplaceHandler.ListProductsByStoreType)
+			marketplace.GET("/stores", marketplaceHandler.ListStores)
+			marketplace.GET("/stores/:id", marketplaceHandler.GetStore)
+			marketplace.GET("/categories", marketplaceHandler.ListCategories)
+			marketplace.GET("/categories/tree", marketplaceHandler.ListCategoriesTree)
+		}
 	}
 	
 	log.Println("Rutas disponibles:")
@@ -178,11 +194,17 @@ func main() {
 	log.Println("🏠 Tenant Dashboard (PIM + Stock por tenant):")
 	log.Println("  GET    /api/v1/tenant/dashboard")
 	log.Println("")
+	log.Println("🛒 Marketplace (Cross-tenant, público):")
+	log.Println("  GET    /api/v1/marketplace/store-types")
+	log.Println("  GET    /api/v1/marketplace/products")
+	log.Println("  GET    /api/v1/marketplace/products/by-store-type/:code")
+	log.Println("  GET    /api/v1/marketplace/categories")
+	log.Println("  GET    /api/v1/marketplace/categories/tree")
+	log.Println("")
 	log.Println("Configuración:")
 	log.Printf("  PIM_SERVICE_URL: %s", pimServiceURL)
 	log.Printf("  STOCK_SERVICE_URL: %s", stockServiceURL)
 	log.Printf("  TENANT_SERVICE_URL: %s", tenantServiceURL)
-	log.Printf("  SCRAPER_SERVICE_URL: %s", scraperServiceURL)
 	log.Printf("  IAM_SERVICE_URL: %s", iamServiceURL)
 	log.Printf("  Cache: tenant_config=%s, stock=%s", tenantConfigTTL, stockAvailabilityTTL)
 
