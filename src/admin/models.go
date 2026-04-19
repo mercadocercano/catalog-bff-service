@@ -15,7 +15,6 @@ type CurationStats struct {
 	Pending       int `json:"pending"`
 	ApprovedToday int `json:"approved_today"`
 	RejectedToday int `json:"rejected_today"`
-	TotalScraped  int `json:"total_scraped"`
 }
 
 // CatalogStats contiene estadísticas del catálogo de productos
@@ -100,18 +99,6 @@ type PIMCategory struct {
 	ID          string `json:"id"`
 	Name        string `json:"name"`
 	ProductsCount int  `json:"products_count,omitempty"`
-}
-
-// ScraperStatsResponse respuesta de stats de Scraper
-type ScraperStatsResponse struct {
-	TotalScraped int `json:"total_scraped"`
-	RecentJobs   []ScraperJob `json:"recent_jobs,omitempty"`
-}
-
-type ScraperJob struct {
-	ID        string `json:"id"`
-	Status    string `json:"status"`
-	CreatedAt string `json:"created_at"`
 }
 
 // TenantServiceResponse respuesta de Tenant Service

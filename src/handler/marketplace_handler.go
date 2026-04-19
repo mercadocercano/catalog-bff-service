@@ -12,11 +12,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// MarketplaceHandler orquesta PIM + Tenant Service para endpoints del marketplace
+// MarketplaceHandler orquesta PIM + IAM Service para endpoints del marketplace
 type MarketplaceHandler struct {
-	pimServiceURL    string
-	tenantServiceURL string
-	httpClient       *http.Client
+	pimServiceURL string
+	iamServiceURL string
+	httpClient    *http.Client
 
 	// Cache de tenants (se refresca cada 5 minutos)
 	tenantCache   map[string]string // tenant_id → name
@@ -25,12 +25,12 @@ type MarketplaceHandler struct {
 }
 
 // NewMarketplaceHandler crea una nueva instancia del handler
-func NewMarketplaceHandler(pimServiceURL, tenantServiceURL string) *MarketplaceHandler {
+func NewMarketplaceHandler(pimServiceURL, iamServiceURL string) *MarketplaceHandler {
 	return &MarketplaceHandler{
-		pimServiceURL:    pimServiceURL,
-		tenantServiceURL: tenantServiceURL,
-		httpClient:       &http.Client{Timeout: 5 * time.Second},
-		tenantCache:      make(map[string]string),
+		pimServiceURL: pimServiceURL,
+		iamServiceURL: iamServiceURL,
+		httpClient:    &http.Client{Timeout: 5 * time.Second},
+		tenantCache:   make(map[string]string),
 	}
 }
 
@@ -90,7 +90,7 @@ func (h *MarketplaceHandler) GetProduct(c *gin.Context) {
 		"image_url":     product.ImageURL,
 		"store_type":    product.StoreType,
 		"variant":       product.Variant,
-		"tenant_name":   tenantNames[product.TenantID],
+		"tenant_name":   resolveTenantName(tenantNames, product.TenantID),
 	}
 
 	c.JSON(http.StatusOK, result)
@@ -105,10 +105,10 @@ func (h *MarketplaceHandler) ListStores(c *gin.Context) {
 	if err != nil || statusCode != http.StatusOK {
 		// Fallback: solo devolver tenants sin product counts
 		stores := make([]map[string]interface{}, 0)
-		for id, name := range tenantNames {
+		for id := range tenantNames {
 			stores = append(stores, map[string]interface{}{
 				"id":            id,
-				"name":          name,
+				"name":          resolveTenantName(tenantNames, id),
 				"product_count": 0,
 			})
 		}
@@ -144,7 +144,7 @@ func (h *MarketplaceHandler) ListStores(c *gin.Context) {
 	for tenantID, info := range tenantProducts {
 		stores = append(stores, map[string]interface{}{
 			"id":            tenantID,
-			"name":          tenantNames[tenantID],
+			"name":          resolveTenantName(tenantNames, tenantID),
 			"product_count": info.ProductCount,
 			"store_type":    info.StoreType,
 		})
@@ -192,7 +192,7 @@ func (h *MarketplaceHandler) GetStore(c *gin.Context) {
 			"image_url":     p.ImageURL,
 			"store_type":    p.StoreType,
 			"variant":       p.Variant,
-			"tenant_name":   tenantNames[p.TenantID],
+			"tenant_name":   resolveTenantName(tenantNames, p.TenantID),
 		})
 	}
 
@@ -205,7 +205,7 @@ func (h *MarketplaceHandler) GetStore(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"store": gin.H{
 			"id":         storeID,
-			"name":       tenantNames[storeID],
+			"name":       resolveTenantName(tenantNames, storeID),
 			"store_type": storeType,
 		},
 		"products":    enriched,
@@ -286,6 +286,7 @@ func (h *MarketplaceHandler) proxyAndEnrich(c *gin.Context, path string) {
 	// Enrich products with tenant_name
 	enriched := make([]map[string]interface{}, 0, len(pimResp.Products))
 	for _, p := range pimResp.Products {
+		tenantName := resolveTenantName(tenantNames, p.TenantID)
 		item := map[string]interface{}{
 			"id":            p.ID,
 			"tenant_id":     p.TenantID,
@@ -296,7 +297,7 @@ func (h *MarketplaceHandler) proxyAndEnrich(c *gin.Context, path string) {
 			"image_url":     p.ImageURL,
 			"store_type":    p.StoreType,
 			"variant":       p.Variant,
-			"tenant_name":   tenantNames[p.TenantID],
+			"tenant_name":   tenantName,
 		}
 		enriched = append(enriched, item)
 	}
@@ -323,11 +324,12 @@ func (h *MarketplaceHandler) getTenantNames(c *gin.Context) map[string]string {
 	// Refresh cache
 	names := make(map[string]string)
 
-	if h.tenantServiceURL == "" {
+	if h.iamServiceURL == "" {
+		log.Println("IAM Service URL no configurada, tenant_name no disponible")
 		return names
 	}
 
-	url := fmt.Sprintf("%s/api/v1/tenants?page=1&page_size=200", h.tenantServiceURL)
+	url := fmt.Sprintf("%s/api/v1/tenants?page=1&page_size=200", h.iamServiceURL)
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
 	if err != nil {
 		log.Printf("Error creando request a tenant-service: %v", err)
@@ -365,6 +367,14 @@ func (h *MarketplaceHandler) getTenantNames(c *gin.Context) map[string]string {
 
 	log.Printf("Tenant cache refreshed: %d tenants", len(names))
 	return names
+}
+
+// resolveTenantName devuelve el nombre del tenant o "Comercio" como fallback
+func resolveTenantName(tenantNames map[string]string, tenantID string) string {
+	if name, ok := tenantNames[tenantID]; ok && name != "" {
+		return name
+	}
+	return "Comercio"
 }
 
 // --- Helpers ---

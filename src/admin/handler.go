@@ -40,11 +40,10 @@ func (h *Handler) GetDashboardStats(c *gin.Context) {
 
 	elapsed := time.Since(start)
 	log.Printf("✅ Dashboard stats obtenidos en %v", elapsed)
-	log.Printf("   - Curación: %d pending, %d approved today, %d rejected today, %d scraped total",
+	log.Printf("   - Curación: %d pending, %d approved today, %d rejected today",
 		stats.Curation.Pending,
 		stats.Curation.ApprovedToday,
-		stats.Curation.RejectedToday,
-		stats.Curation.TotalScraped)
+		stats.Curation.RejectedToday)
 	log.Printf("   - Catálogo: %d productos, %d variantes, %d activos, %d categorías",
 		stats.Catalog.TotalProducts,
 		stats.Catalog.TotalVariants,

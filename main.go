@@ -102,7 +102,7 @@ func main() {
 	tenantDashboardHandler := tenant_dashboard.NewHandler(tenantDashboardService)
 
 	// Handler para marketplace (cross-tenant, endpoints públicos)
-	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, tenantServiceURL)
+	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, iamServiceURL)
 
 	// API v1
 	v1 := router.Group("/api/v1")

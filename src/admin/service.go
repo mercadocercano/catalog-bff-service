@@ -13,20 +13,18 @@ import (
 
 // DashboardService orquesta la obtención de métricas de múltiples servicios
 type DashboardService struct {
-	pimServiceURL     string
-	scraperServiceURL string
-	iamServiceURL     string
-	tenantServiceURL  string
-	httpClient        *http.Client
+	pimServiceURL    string
+	iamServiceURL    string
+	tenantServiceURL string
+	httpClient       *http.Client
 }
 
 // NewDashboardService crea una nueva instancia del servicio de dashboard
-func NewDashboardService(pimURL, scraperURL, iamURL, tenantURL string) *DashboardService {
+func NewDashboardService(pimURL, iamURL, tenantURL string) *DashboardService {
 	return &DashboardService{
-		pimServiceURL:     pimURL,
-		scraperServiceURL: scraperURL,
-		iamServiceURL:     iamURL,
-		tenantServiceURL:  tenantURL,
+		pimServiceURL:    pimURL,
+		iamServiceURL:    iamURL,
+		tenantServiceURL: tenantURL,
 		httpClient: &http.Client{
 			Timeout: 2 * time.Second, // Timeout de 2 segundos por servicio
 		},
@@ -123,17 +121,6 @@ func (s *DashboardService) getCurationStats(ctx context.Context) CurationStats {
 		var pimResp PIMProductsResponse
 		if err := json.Unmarshal(resp, &pimResp); err == nil {
 			stats.RejectedToday = pimResp.Pagination.TotalItems
-		}
-	}
-
-	// Obtener total de productos scrapeados (source=scraper)
-	scrapedURL := fmt.Sprintf("%s/api/v1/products?page=1&page_size=1", s.pimServiceURL)
-	if resp := s.makeRequest(ctx, scrapedURL); resp != nil {
-		var pimResp PIMProductsResponse
-		if err := json.Unmarshal(resp, &pimResp); err == nil {
-			// Contar productos cuyo metadata contiene "source": "scraper"
-			// Por ahora usar el total, luego se puede filtrar mejor
-			stats.TotalScraped = s.countScrapedProducts(ctx)
 		}
 	}
 
@@ -264,7 +251,6 @@ func (s *DashboardService) getServicesHealth(ctx context.Context) []ServiceHealt
 		url  string
 	}{
 		{"pim-service", s.pimServiceURL},
-		{"scraper-service", s.scraperServiceURL},
 		{"iam-service", s.iamServiceURL},
 		{"tenant-service", s.tenantServiceURL},
 	}
@@ -350,31 +336,3 @@ func (s *DashboardService) makeRequest(ctx context.Context, url string) []byte {
 	return body
 }
 
-// countScrapedProducts cuenta productos que vienen de scraper
-// En producción esto debería ser un endpoint específico en PIM
-func (s *DashboardService) countScrapedProducts(ctx context.Context) int {
-	// Por ahora retornar un valor estimado
-	// TODO: Implementar endpoint en PIM que filtre por source=scraper
-	productsURL := fmt.Sprintf("%s/api/v1/products?page=1&page_size=100", s.pimServiceURL)
-	if resp := s.makeRequest(ctx, productsURL); resp != nil {
-		var pimResp PIMProductsResponse
-		if err := json.Unmarshal(resp, &pimResp); err == nil {
-			count := 0
-			for _, product := range pimResp.Products {
-				if metadata, ok := product.Metadata["source"]; ok {
-					if source, ok := metadata.(string); ok && source == "scraper" {
-						count++
-					}
-				}
-			}
-			// Si encontramos productos scrapeados en la primera página,
-			// estimar el total proporcionalmente
-			if count > 0 && pimResp.Pagination.TotalItems > 0 {
-				ratio := float64(count) / float64(len(pimResp.Products))
-				return int(ratio * float64(pimResp.Pagination.TotalItems))
-			}
-		}
-	}
-	
-	return 0
-}
