@@ -59,25 +59,38 @@ jobs:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           DROPLET_IP: ${{ secrets.DROPLET_IP }}
 
-      - name: Deploy to K8s
+      - name: Deploy to K8s with rollback
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy@${{ secrets.DROPLET_IP }} \
             "export KUBECONFIG=/home/deploy/.kube/config && \
+             kubectl patch deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} \
+               --type=merge -p '{\"spec\":{\"strategy\":{\"type\":\"Recreate\",\"rollingUpdate\":null}}}' && \
              kubectl set image deployment/${{ env.DEPLOYMENT_NAME }} \
                ${{ env.CONTAINER_NAME }}=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
                -n ${{ env.NAMESPACE }} && \
              kubectl rollout status deployment/${{ env.DEPLOYMENT_NAME }} \
-               -n ${{ env.NAMESPACE }} --timeout=180s"
+               -n ${{ env.NAMESPACE }} --timeout=300s || \
+             (kubectl rollout undo deployment/${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} && \
+              echo 'Rollback triggered' && exit 1)"
 
       - name: Verify Pod Ready
         run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy@${{ secrets.DROPLET_IP }} \
-            "export KUBECONFIG=/home/deploy/.kube/config && \
-             READY=\$(kubectl get pods -l app=catalog-bff-service -o jsonpath='{.items[0].status.containerStatuses[0].ready}') && \
-             IMAGE=\$(kubectl get pods -l app=catalog-bff-service -o jsonpath='{.items[0].spec.containers[0].image}') && \
-             echo \"Pod ready: \$READY\" && echo \"Image: \$IMAGE\" && \
-             [ \"\$READY\" = 'true' ] || (echo '❌ Pod not ready'; exit 1) && \
-             echo '✅ catalog-bff-service is running and healthy'"
+          EXPECTED="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}"
+          for ATTEMPT in 1 2 3 4 5 6 7 8 9; do
+            echo "Attempt $ATTEMPT/9..."
+            POD_LINE=$(ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no deploy@${{ secrets.DROPLET_IP }} \
+              "export KUBECONFIG=/home/deploy/.kube/config && \
+               kubectl get pods -l app=${{ env.DEPLOYMENT_NAME }} -n ${{ env.NAMESPACE }} \
+               -o jsonpath='{range .items[*]}{.spec.containers[0].image} {.status.containerStatuses[0].ready}{\"\\n\"}{end}'" 2>/dev/null) || true
+            echo "$POD_LINE"
+            if echo "$POD_LINE" | grep -q "${EXPECTED} true"; then
+              echo "✅ ${{ env.IMAGE_NAME }} is running and healthy"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "❌ Pod not ready with image ${EXPECTED} after 90s"
+          exit 1
 
 
 
