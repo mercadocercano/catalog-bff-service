@@ -102,7 +102,8 @@ func main() {
 	tenantDashboardHandler := tenant_dashboard.NewHandler(tenantDashboardService)
 
 	// Handler para marketplace (cross-tenant, endpoints públicos)
-	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, iamServiceURL)
+	s2sAPIKey := getEnv("S2S_API_KEY", "s2s-internal")
+	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, iamServiceURL, s2sAPIKey)
 
 	// API v1
 	v1 := router.Group("/api/v1")

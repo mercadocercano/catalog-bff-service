@@ -14,6 +14,46 @@ import (
 	"catalog-bff-service/src/infrastructure/stock/client"
 )
 
+// PIMVariantsListResponse representa la respuesta de listado de PIM
+type PIMVariantsListResponse struct {
+	Variants   []PIMVariantItem `json:"variants"`
+	Pagination PIMPagination    `json:"pagination"`
+}
+
+type PIMPagination struct {
+	Page       int `json:"page"`
+	PageSize   int `json:"page_size"`
+	TotalItems int `json:"total_items"`
+	TotalPages int `json:"total_pages"`
+}
+
+type PIMVariantItem struct {
+	ID        string  `json:"id"`
+	ProductID string  `json:"product_id"`
+	Name      string  `json:"name"`
+	SKU       *string `json:"sku"`
+	Status    string  `json:"status"`
+	IsDefault bool    `json:"is_default"`
+}
+
+// SellableVariantResponse es el DTO de respuesta para variantes vendibles
+type SellableVariantResponse struct {
+	VariantID         string  `json:"variant_id"`
+	ProductID         string  `json:"product_id"`
+	VariantName       string  `json:"variant_name"`
+	SKU               string  `json:"sku"`
+	IsDefault         bool    `json:"is_default"`
+	AvailableQuantity float64 `json:"available_quantity"`
+	ReservedQuantity  float64 `json:"reserved_quantity"`
+	IsSellable        bool    `json:"is_sellable"`
+}
+
+// SellableVariantsListResponse es la respuesta del endpoint
+type SellableVariantsListResponse struct {
+	Items      []SellableVariantResponse `json:"items"`
+	TotalCount int                       `json:"total_count"`
+}
+
 // SellableVariantsHandler maneja el endpoint de variantes vendibles
 // con inyección de dependencias para el resolver de Stock Policy
 type SellableVariantsHandler struct {

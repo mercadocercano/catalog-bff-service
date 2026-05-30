@@ -16,6 +16,7 @@ import (
 type MarketplaceHandler struct {
 	pimServiceURL string
 	iamServiceURL string
+	s2sAPIKey     string
 	httpClient    *http.Client
 
 	// Cache de tenants (se refresca cada 5 minutos)
@@ -25,10 +26,11 @@ type MarketplaceHandler struct {
 }
 
 // NewMarketplaceHandler crea una nueva instancia del handler
-func NewMarketplaceHandler(pimServiceURL, iamServiceURL string) *MarketplaceHandler {
+func NewMarketplaceHandler(pimServiceURL, iamServiceURL, s2sAPIKey string) *MarketplaceHandler {
 	return &MarketplaceHandler{
 		pimServiceURL: pimServiceURL,
 		iamServiceURL: iamServiceURL,
+		s2sAPIKey:     s2sAPIKey,
 		httpClient:    &http.Client{Timeout: 5 * time.Second},
 		tenantCache:   make(map[string]string),
 	}
@@ -335,7 +337,7 @@ func (h *MarketplaceHandler) getTenantNames(c *gin.Context) map[string]string {
 		log.Printf("Error creando request a tenant-service: %v", err)
 		return names
 	}
-	req.Header.Set("X-API-Key", "s2s-internal")
+	req.Header.Set("X-API-Key", h.s2sAPIKey)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
