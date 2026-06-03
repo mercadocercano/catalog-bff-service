@@ -28,6 +28,10 @@ tags:
     description: Catálogo de lectura agregada
   - name: Admin
     description: Dashboard y métricas
+  - name: Tenant
+    description: Dashboard y datos del tenant autenticado
+  - name: Marketplace
+    description: Endpoints publicos cross-tenant del marketplace
 
 components:
   securitySchemes:
@@ -598,6 +602,56 @@ components:
           type: string
           format: date-time
 
+    # --- Tenant Dashboard ---
+    TenantDashboardResponse:
+      type: object
+      properties:
+        products_count:
+          type: integer
+          description: Total de productos del tenant
+        variants_count:
+          type: integer
+          description: Total de variantes del tenant
+        stock_summary:
+          type: object
+          properties:
+            total_available:
+              type: number
+              format: double
+            total_reserved:
+              type: number
+              format: double
+            total_skus:
+              type: integer
+
+    # --- Marketplace ---
+    StoreTypeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        code:
+          type: string
+        icon:
+          type: string
+
+    MarketplaceProductListResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+        total_count:
+          type: integer
+        page:
+          type: integer
+        page_size:
+          type: integer
+
     # --- Errores ---
     ErrorResponse:
       type: object
@@ -1148,3 +1202,193 @@ paths:
                 $ref: '#/components/schemas/DashboardStatsResponse'
         '500':
           description: Error al obtener estadísticas
+
+  /api/v1/tenant/dashboard:
+    get:
+      summary: Dashboard de tenant
+      description: Resumen de catálogo y stock para el tenant autenticado (PIM + Stock orquestado)
+      operationId: getTenantDashboard
+      tags: [Tenant]
+      security:
+        - BearerAuth: []
+        - TenantId: []
+      responses:
+        '200':
+          description: Dashboard del tenant
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantDashboardResponse'
+        '400':
+          description: X-Tenant-ID faltante
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '502':
+          description: PIM o Stock no disponible
+
+  /api/v1/marketplace/store-types:
+    get:
+      summary: Listar tipos de comercio
+      description: Tipos de comercio disponibles en el marketplace (cross-tenant, publico)
+      operationId: listStoreTypes
+      tags: [Marketplace]
+      security: []
+      responses:
+        '200':
+          description: Lista de tipos de comercio
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/StoreTypeResponse'
+        '502':
+          description: PIM no disponible
+
+  /api/v1/marketplace/products:
+    get:
+      summary: Listar productos del marketplace
+      description: Productos disponibles en el marketplace (cross-tenant, publico)
+      operationId: listMarketplaceProducts
+      tags: [Marketplace]
+      security: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: category_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Lista de productos del marketplace
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceProductListResponse'
+        '502':
+          description: PIM no disponible
+
+  /api/v1/marketplace/products/{id}:
+    get:
+      summary: Obtener producto del marketplace
+      description: Detalle de un producto en el marketplace (cross-tenant, publico)
+      operationId: getMarketplaceProduct
+      tags: [Marketplace]
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle del producto
+        '404':
+          description: Producto no encontrado
+        '502':
+          description: PIM no disponible
+
+  /api/v1/marketplace/products/by-store-type/{code}:
+    get:
+      summary: Listar productos por tipo de comercio
+      description: Productos del marketplace filtrados por tipo de comercio
+      operationId: listMarketplaceProductsByStoreType
+      tags: [Marketplace]
+      security: []
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de productos del tipo de comercio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketplaceProductListResponse'
+        '502':
+          description: PIM no disponible
+
+  /api/v1/marketplace/stores:
+    get:
+      summary: Listar tiendas del marketplace
+      description: Tiendas disponibles en el marketplace (cross-tenant, publico)
+      operationId: listMarketplaceStores
+      tags: [Marketplace]
+      security: []
+      responses:
+        '200':
+          description: Lista de tiendas
+        '502':
+          description: IAM o PIM no disponible
+
+  /api/v1/marketplace/stores/{id}:
+    get:
+      summary: Obtener tienda del marketplace
+      description: Detalle de una tienda en el marketplace (cross-tenant, publico)
+      operationId: getMarketplaceStore
+      tags: [Marketplace]
+      security: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle de la tienda
+        '404':
+          description: Tienda no encontrada
+        '502':
+          description: IAM no disponible
+
+  /api/v1/marketplace/categories:
+    get:
+      summary: Listar categorias del marketplace
+      description: Categorias disponibles en el marketplace (cross-tenant, publico)
+      operationId: listMarketplaceCategories
+      tags: [Marketplace]
+      security: []
+      responses:
+        '200':
+          description: Lista de categorias
+        '502':
+          description: PIM no disponible
+
+  /api/v1/marketplace/categories/tree:
+    get:
+      summary: Arbol de categorias del marketplace
+      description: Categorias del marketplace en estructura jerarquica (cross-tenant, publico)
+      operationId: listMarketplaceCategoriesTree
+      tags: [Marketplace]
+      security: []
+      responses:
+        '200':
+          description: Arbol de categorias
+        '502':
+          description: PIM no disponible
