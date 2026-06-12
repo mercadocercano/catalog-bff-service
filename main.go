@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hornosg/go-shared/infrastructure/env"
 	tenantmw "github.com/hornosg/go-shared/infrastructure/middleware"
 
 	"catalog-bff-service/src/admin"
@@ -16,14 +17,6 @@ import (
 	tenantclient "catalog-bff-service/src/infrastructure/tenant/client"
 	tenant_dashboard "catalog-bff-service/src/tenant_dashboard"
 )
-
-func getEnv(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
-}
 
 func main() {
 	router := gin.New()
@@ -45,15 +38,15 @@ func main() {
 	})
 
 	// Configuración de servicios
-	pimServiceURL := getEnv("PIM_SERVICE_URL", "http://localhost:8090")
-	stockServiceURL := getEnv("STOCK_SERVICE_URL", "http://localhost:8100")
-	tenantServiceURL := getEnv("TENANT_SERVICE_URL", "")
-	iamServiceURL := getEnv("IAM_SERVICE_URL", "http://localhost:8080")
+	pimServiceURL := env.Get("PIM_SERVICE_URL", "http://localhost:8090")
+	stockServiceURL := env.Get("STOCK_SERVICE_URL", "http://localhost:8100")
+	tenantServiceURL := env.Get("TENANT_SERVICE_URL", "")
+	iamServiceURL := env.Get("IAM_SERVICE_URL", "http://localhost:8080")
 
 	// Configuración de cache (TTLs configurables por env)
-	tenantConfigTTL := parseDuration(getEnv("TENANT_CONFIG_CACHE_TTL", "60s"), 60*time.Second)
-	stockAvailabilityTTL := parseDuration(getEnv("STOCK_CACHE_TTL", "5s"), 5*time.Second)
-	cacheCleanupInterval := parseDuration(getEnv("CACHE_CLEANUP_INTERVAL", "60s"), 60*time.Second)
+	tenantConfigTTL := parseDuration(env.Get("TENANT_CONFIG_CACHE_TTL", "60s"), 60*time.Second)
+	stockAvailabilityTTL := parseDuration(env.Get("STOCK_CACHE_TTL", "5s"), 5*time.Second)
+	cacheCleanupInterval := parseDuration(env.Get("CACHE_CLEANUP_INTERVAL", "60s"), 60*time.Second)
 
 	log.Printf("Cache configurado: tenant_config_ttl=%s, stock_ttl=%s, cleanup=%s",
 		tenantConfigTTL, stockAvailabilityTTL, cacheCleanupInterval)
@@ -102,7 +95,7 @@ func main() {
 	tenantDashboardHandler := tenant_dashboard.NewHandler(tenantDashboardService)
 
 	// Handler para marketplace (cross-tenant, endpoints públicos)
-	s2sAPIKey := getEnv("S2S_API_KEY", "s2s-internal")
+	s2sAPIKey := env.Get("S2S_API_KEY", "s2s-internal")
 	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, iamServiceURL, s2sAPIKey)
 
 	// API v1
@@ -113,7 +106,7 @@ func main() {
 		{
 			// HITO 1: Endpoint agregado variante + stock
 			catalog.GET("/variants/:id", handler.GetVariantWithStock)
-			
+
 			// Endpoint catálogo vendible (con Stock Policy por tenant)
 			catalog.GET("/sellable-variants", sellableVariantsHandler.Handle)
 		}
@@ -167,7 +160,7 @@ func main() {
 			marketplace.GET("/categories/tree", marketplaceHandler.ListCategoriesTree)
 		}
 	}
-	
+
 	log.Println("Rutas disponibles:")
 	log.Println("")
 	log.Println("📦 Catálogo (Lectura Agregada):")
@@ -209,7 +202,7 @@ func main() {
 	log.Printf("  IAM_SERVICE_URL: %s", iamServiceURL)
 	log.Printf("  Cache: tenant_config=%s, stock=%s", tenantConfigTTL, stockAvailabilityTTL)
 
-	port := getEnv("PORT", "8085")
+	port := env.Get("PORT", "8085")
 	log.Printf("Catalog BFF service iniciando en http://localhost:%s", port)
 	router.Run(":" + port)
 }

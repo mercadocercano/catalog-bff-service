@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hornosg/go-shared/infrastructure/env"
 	"github.com/hornosg/go-shared/infrastructure/response"
 )
 
@@ -75,8 +76,8 @@ func GetVariantWithStock(c *gin.Context) {
 	}
 
 	// URLs de servicios (desde env o default localhost)
-	pimURL := getEnvOrDefault("PIM_SERVICE_URL", "http://localhost:8090")
-	stockURL := getEnvOrDefault("STOCK_SERVICE_URL", "http://localhost:8100")
+	pimURL := env.Get("PIM_SERVICE_URL", "http://localhost:8090")
+	stockURL := env.Get("STOCK_SERVICE_URL", "http://localhost:8100")
 
 	// 1. Llamar a PIM para obtener variante
 	pimReq, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/product-variants/%s", pimURL, variantID), nil)
@@ -170,16 +171,4 @@ func GetVariantWithStock(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, result)
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := getEnv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-func getEnv(key string) string {
-	// Simple env lookup (en producción usar os.Getenv)
-	return ""
 }
