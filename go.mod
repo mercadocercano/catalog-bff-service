@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gin-gonic/gin v1.10.0
-	github.com/hornosg/go-shared v0.6.0
+	github.com/hornosg/go-shared v0.7.0
 	github.com/stretchr/testify v1.11.1
 )
 
