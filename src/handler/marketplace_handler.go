@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hornosg/go-shared/infrastructure/response"
 )
 
 // MarketplaceHandler orquesta PIM + IAM Service para endpoints del marketplace
@@ -66,7 +67,7 @@ func (h *MarketplaceHandler) GetProduct(c *gin.Context) {
 
 	body, statusCode, err := h.fetchFromPIM(c, "/api/v1/marketplace/products/"+productID)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		response.JSON(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	if statusCode != http.StatusOK {
@@ -167,7 +168,7 @@ func (h *MarketplaceHandler) GetStore(c *gin.Context) {
 
 	body, statusCode, err := h.fetchFromPIM(c, "/api/v1/marketplace/products/by-tenant/"+storeID+queryString)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		response.JSON(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	if statusCode != http.StatusOK {
@@ -266,7 +267,7 @@ func (h *MarketplaceHandler) proxyAndEnrich(c *gin.Context, path string) {
 	// Fetch products from PIM
 	body, statusCode, err := h.fetchFromPIM(c, path)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		response.JSON(c, http.StatusBadGateway, err.Error())
 		return
 	}
 	if statusCode != http.StatusOK {
@@ -414,7 +415,7 @@ func (h *MarketplaceHandler) proxyToPIM(c *gin.Context, path string) {
 	body, statusCode, err := h.fetchFromPIM(c, path)
 	if err != nil {
 		log.Printf("Error proxy PIM %s: %v", path, err)
-		c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+		response.JSON(c, http.StatusBadGateway, err.Error())
 		return
 	}
 

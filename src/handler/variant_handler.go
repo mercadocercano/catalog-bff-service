@@ -8,20 +8,21 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hornosg/go-shared/infrastructure/response"
 )
 
 // PIMVariantResponse representa la respuesta de PIM
 type PIMVariantResponse struct {
-	ID         string                 `json:"id"`
-	ProductID  string                 `json:"product_id"`
-	Name       string                 `json:"name"`
-	SKU        *string                `json:"sku"`
-	Status     string                 `json:"status"`
-	IsDefault  bool                   `json:"is_default"`
-	SortOrder  int                    `json:"sort_order"`
-	Attributes []VariantAttribute     `json:"attributes"`
-	CreatedAt  time.Time              `json:"created_at"`
-	UpdatedAt  time.Time              `json:"updated_at"`
+	ID         string             `json:"id"`
+	ProductID  string             `json:"product_id"`
+	Name       string             `json:"name"`
+	SKU        *string            `json:"sku"`
+	Status     string             `json:"status"`
+	IsDefault  bool               `json:"is_default"`
+	SortOrder  int                `json:"sort_order"`
+	Attributes []VariantAttribute `json:"attributes"`
+	CreatedAt  time.Time          `json:"created_at"`
+	UpdatedAt  time.Time          `json:"updated_at"`
 }
 
 type VariantAttribute struct {
@@ -47,13 +48,13 @@ type StockAvailabilityResponse struct {
 
 // CatalogVariantResponse es la respuesta agregada
 type CatalogVariantResponse struct {
-	VariantID    string       `json:"variant_id"`
-	ProductID    string       `json:"product_id"`
-	ProductName  string       `json:"product_name"`
-	VariantName  string       `json:"variant_name"`
-	SKU          string       `json:"sku"`
-	IsDefault    bool         `json:"is_default"`
-	Stock        StockInfo    `json:"stock"`
+	VariantID   string    `json:"variant_id"`
+	ProductID   string    `json:"product_id"`
+	ProductName string    `json:"product_name"`
+	VariantName string    `json:"variant_name"`
+	SKU         string    `json:"sku"`
+	IsDefault   bool      `json:"is_default"`
+	Stock       StockInfo `json:"stock"`
 }
 
 type StockInfo struct {
@@ -69,7 +70,7 @@ func GetVariantWithStock(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		response.JSON(c, http.StatusBadRequest, "X-Tenant-ID header is required")
 		return
 	}
 
@@ -80,7 +81,7 @@ func GetVariantWithStock(c *gin.Context) {
 	// 1. Llamar a PIM para obtener variante
 	pimReq, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/product-variants/%s", pimURL, variantID), nil)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to create PIM request"})
+		response.JSON(c, http.StatusBadGateway, "Failed to create PIM request")
 		return
 	}
 	pimReq.Header.Set("X-Tenant-ID", tenantID)
@@ -90,7 +91,7 @@ func GetVariantWithStock(c *gin.Context) {
 
 	pimResp, err := http.DefaultClient.Do(pimReq)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "PIM service unavailable", "details": err.Error()})
+		response.JSONWithDetails(c, http.StatusBadGateway, "PIM service unavailable", err.Error())
 		return
 	}
 	defer pimResp.Body.Close()
@@ -103,20 +104,20 @@ func GetVariantWithStock(c *gin.Context) {
 
 	var variant PIMVariantResponse
 	if err := json.NewDecoder(pimResp.Body).Decode(&variant); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to parse PIM response"})
+		response.JSON(c, http.StatusBadGateway, "Failed to parse PIM response")
 		return
 	}
 
 	// Validar que tenga SKU
 	if variant.SKU == nil || *variant.SKU == "" {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Variant has no SKU"})
+		response.JSON(c, http.StatusBadGateway, "Variant has no SKU")
 		return
 	}
 
 	// 2. Llamar a Stock para obtener disponibilidad
 	stockReq, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/availability?sku=%s", stockURL, *variant.SKU), nil)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to create Stock request"})
+		response.JSON(c, http.StatusBadGateway, "Failed to create Stock request")
 		return
 	}
 	stockReq.Header.Set("X-Tenant-ID", tenantID)
@@ -126,7 +127,7 @@ func GetVariantWithStock(c *gin.Context) {
 
 	stockResp, err := http.DefaultClient.Do(stockReq)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Stock service unavailable", "details": err.Error()})
+		response.JSONWithDetails(c, http.StatusBadGateway, "Stock service unavailable", err.Error())
 		return
 	}
 	defer stockResp.Body.Close()
@@ -136,7 +137,7 @@ func GetVariantWithStock(c *gin.Context) {
 	if stockResp.StatusCode == http.StatusOK {
 		var stockData StockAvailabilityResponse
 		if err := json.NewDecoder(stockResp.Body).Decode(&stockData); err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to parse Stock response"})
+			response.JSON(c, http.StatusBadGateway, "Failed to parse Stock response")
 			return
 		}
 		stockInfo = StockInfo{
@@ -158,7 +159,7 @@ func GetVariantWithStock(c *gin.Context) {
 	}
 
 	// 3. Merge y respuesta
-	response := CatalogVariantResponse{
+	result := CatalogVariantResponse{
 		VariantID:   variant.ID,
 		ProductID:   variant.ProductID,
 		ProductName: "", // PIM no devuelve product_name en variant, dejar vacío o hacer otra llamada
@@ -168,7 +169,7 @@ func GetVariantWithStock(c *gin.Context) {
 		Stock:       stockInfo,
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, result)
 }
 
 func getEnvOrDefault(key, defaultValue string) string {

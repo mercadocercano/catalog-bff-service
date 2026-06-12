@@ -9,7 +9,8 @@ import (
 	"sync"
 
 	"github.com/gin-gonic/gin"
-	
+	"github.com/hornosg/go-shared/infrastructure/response"
+
 	"catalog-bff-service/src/domain"
 	"catalog-bff-service/src/infrastructure/stock/client"
 )
@@ -81,7 +82,7 @@ func (h *SellableVariantsHandler) Handle(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 
 	if tenantID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "X-Tenant-ID header is required"})
+		response.JSON(c, http.StatusBadRequest, "X-Tenant-ID header is required")
 		return
 	}
 
@@ -92,7 +93,7 @@ func (h *SellableVariantsHandler) Handle(c *gin.Context) {
 	// PASO 1: Obtener todas las variantes del tenant desde PIM
 	pimReq, err := http.NewRequest("GET", fmt.Sprintf("%s/api/v1/product-variants?page_size=1000", h.pimServiceURL), nil)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to create PIM request"})
+		response.JSON(c, http.StatusBadGateway, "Failed to create PIM request")
 		return
 	}
 	pimReq.Header.Set("X-Tenant-ID", tenantID)
@@ -102,7 +103,7 @@ func (h *SellableVariantsHandler) Handle(c *gin.Context) {
 
 	pimResp, err := http.DefaultClient.Do(pimReq)
 	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "PIM service unavailable", "details": err.Error()})
+		response.JSONWithDetails(c, http.StatusBadGateway, "PIM service unavailable", err.Error())
 		return
 	}
 	defer pimResp.Body.Close()
@@ -115,7 +116,7 @@ func (h *SellableVariantsHandler) Handle(c *gin.Context) {
 
 	var pimData PIMVariantsListResponse
 	if err := json.NewDecoder(pimResp.Body).Decode(&pimData); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to parse PIM response"})
+		response.JSON(c, http.StatusBadGateway, "Failed to parse PIM response")
 		return
 	}
 
@@ -136,7 +137,7 @@ func (h *SellableVariantsHandler) Handle(c *gin.Context) {
 
 			// Obtener stock para este SKU usando el cliente con cache
 			availability, err := h.stockClient.GetAvailability(ctx, tenantID, *v.SKU)
-			
+
 			// Inicializar con stock en 0
 			availableQty := 0.0
 			reservedQty := 0.0
@@ -173,12 +174,12 @@ func (h *SellableVariantsHandler) Handle(c *gin.Context) {
 	wg.Wait()
 
 	// PASO 3: Responder con catálogo completo
-	response := SellableVariantsListResponse{
+	result := SellableVariantsListResponse{
 		Items:      sellableVariants,
 		TotalCount: len(sellableVariants),
 	}
 
-	c.JSON(http.StatusOK, response)
+	c.JSON(http.StatusOK, result)
 }
 
 // resolveStockPolicy resuelve la policy del tenant usando el resolver
