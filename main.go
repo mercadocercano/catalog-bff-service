@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	tenantmw "github.com/mercadocercano/middleware"
+	tenantmw "github.com/hornosg/go-shared/infrastructure/middleware"
 
 	"catalog-bff-service/src/admin"
 	"catalog-bff-service/src/domain"

@@ -1,9 +1,8 @@
-FROM golang:1.24-alpine
+FROM golang:1.25-alpine
 
 WORKDIR /app
 
-# Instalar air para hot reload (versión compatible con Go 1.21)
-RUN go install github.com/cosmtrek/air@v1.49.0
+RUN go install github.com/air-verse/air@v1.61.7
 
 # Copiar go mod files
 COPY go.mod go.sum ./
