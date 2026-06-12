@@ -350,9 +350,9 @@ adminGroup.Use(authMiddleware.RequireRole("marketplace_admin", "admin"))
 
 ## 📚 Documentación Relacionada
 
-- [DASHBOARD_ENDPOINT.md](./DASHBOARD_ENDPOINT.md) - Documentación detallada del endpoint
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Arquitectura del catalog-bff-service
-- [README.md](./README.md) - Guía principal del servicio
+- [dashboard-endpoint.md](./dashboard-endpoint.md) - Documentación detallada del endpoint
+- [ADR-001: Composición de lecturas](../adr/ADR-001-bff-composicion-lecturas.md) - Arquitectura del catalog-bff-service
+- [README.md](../../README.md) - Guía principal del servicio
 
 ## 🎯 Cumplimiento de Requisitos
 

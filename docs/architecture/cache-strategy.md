@@ -401,8 +401,8 @@ go test -v ./src/infrastructure/cache/...
 
 ### Documentos Relacionados
 
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Decisión de arquitectura del servicio
-- [README.md](./README.md) - Documentación general del servicio
+- [ADR-001: Composición de lecturas](../adr/ADR-001-bff-composicion-lecturas.md) - Decisión de arquitectura del servicio
+- [README.md](../../README.md) - Documentación general del servicio
 
 ### Patrones Aplicados
 

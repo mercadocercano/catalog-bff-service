@@ -314,6 +314,6 @@ Ver documentación en `marketplace-admin`:
 
 ## Referencias
 
-- [Arquitectura del catalog-bff-service](./ARCHITECTURE.md)
+- [Arquitectura del catalog-bff-service (ADR-001)](../adr/ADR-001-bff-composicion-lecturas.md)
 - [Patrón API Composition](https://microservices.io/patterns/data/api-composition.html)
 - [Backend for Frontend (BFF)](https://learn.microsoft.com/en-us/azure/architecture/patterns/backends-for-frontends)

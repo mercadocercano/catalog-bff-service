@@ -584,6 +584,6 @@ const displayStats = stats || previousStats;
 
 ## 🔗 Referencias
 
-- Documentación del endpoint: [DASHBOARD_ENDPOINT.md](./DASHBOARD_ENDPOINT.md)
-- Implementación backend: [IMPLEMENTACION_DASHBOARD.md](./IMPLEMENTACION_DASHBOARD.md)
-- Resumen ejecutivo: [DASHBOARD_SUMMARY.md](./DASHBOARD_SUMMARY.md)
+- Documentación del endpoint: [dashboard-endpoint.md](./dashboard-endpoint.md)
+- Implementación backend: [dashboard-implementation.md](./dashboard-implementation.md)
+- Resumen ejecutivo: [dashboard-summary.md](./dashboard-summary.md)

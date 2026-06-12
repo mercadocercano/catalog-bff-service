@@ -15,7 +15,7 @@ Este servicio **NO es un dominio nuevo**. Es un **servicio de composición** (AP
 
 **Rol:** Backend for Frontend (BFF) simplificado - separación query/command (CQRS light).
 
-> 📖 **Decisión de arquitectura completa:** Ver [ARCHITECTURE.md](./ARCHITECTURE.md)
+> 📖 **Decisión de arquitectura completa:** Ver [ADR-001: Composición de lecturas](./docs/adr/ADR-001-bff-composicion-lecturas.md)
 
 ---
 
@@ -77,7 +77,7 @@ GET /api/v1/admin/dashboard/stats
 - Tenant Service (tenants activos)
 - Health checks de todos los servicios
 
-**Documentación completa:** Ver [DASHBOARD_ENDPOINT.md](./DASHBOARD_ENDPOINT.md)
+**Documentación completa:** Ver [dashboard-endpoint.md](./docs/guides/dashboard-endpoint.md)
 
 ---
 
@@ -163,7 +163,7 @@ Este servicio implementa cache in-memory para mejorar la performance:
 - Thread-safe (sync.Map)
 - Cleanup automático de entradas expiradas
 
-**Documentación completa:** Ver [CACHE_STRATEGY.md](./CACHE_STRATEGY.md)
+**Documentación completa:** Ver [cache-strategy.md](./docs/architecture/cache-strategy.md)
 
 **Configuración:**
 ```bash
@@ -171,3 +171,9 @@ Este servicio implementa cache in-memory para mejorar la performance:
 TENANT_CONFIG_CACHE_TTL=120s
 STOCK_CACHE_TTL=10s
 ```
+
+---
+
+## 📚 Documentación
+
+Ver [`docs/`](docs/README.md) para arquitectura, ADRs, setup y guías operativas. El contrato de API está en [`api-docs/openapi.yaml`](api-docs/openapi.yaml).

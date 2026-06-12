@@ -459,10 +459,10 @@ kubectl rollout undo deployment/catalog-bff-service --to-revision=2
 
 ## 📚 Referencias
 
-- [README.md](./README.md) - Información general
-- [BACKOFFICE_CRUD.md](./BACKOFFICE_CRUD.md) - Documentación de API
-- [TEST_README.md](./TEST_README.md) - Guía de testing
-- [ARCHITECTURE.md](./ARCHITECTURE.md) - Decisiones de arquitectura
+- [README.md](../../README.md) - Información general
+- [Backoffice CRUD](../guides/backoffice-crud.md) - Documentación de API
+- [Testing](../guides/testing.md) - Guía de testing
+- [ADR-001: Composición de lecturas](../adr/ADR-001-bff-composicion-lecturas.md) - Decisiones de arquitectura
 
 ---
 

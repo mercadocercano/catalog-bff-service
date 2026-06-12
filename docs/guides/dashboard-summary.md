@@ -229,10 +229,10 @@ curl http://localhost:8085/api/v1/admin/dashboard/stats \
 
 | Archivo | Descripción |
 |---------|-------------|
-| [DASHBOARD_ENDPOINT.md](./DASHBOARD_ENDPOINT.md) | Documentación detallada del endpoint |
-| [IMPLEMENTACION_DASHBOARD.md](./IMPLEMENTACION_DASHBOARD.md) | Guía de implementación y testing |
-| [ARCHITECTURE.md](./ARCHITECTURE.md) | Arquitectura del catalog-bff-service |
-| [README.md](./README.md) | Guía principal del servicio |
+| [dashboard-endpoint.md](./dashboard-endpoint.md) | Documentación detallada del endpoint |
+| [dashboard-implementation.md](./dashboard-implementation.md) | Guía de implementación y testing |
+| [ADR-001: Composición de lecturas](../adr/ADR-001-bff-composicion-lecturas.md) | Arquitectura del catalog-bff-service |
+| [README.md](../../README.md) | Guía principal del servicio |
 
 ---
 
@@ -302,9 +302,9 @@ adminGroup.Use(authMiddleware.RequireRole("marketplace_admin", "admin"))
 
 Para más información sobre la implementación, consultar:
 
-- Documentación técnica: [DASHBOARD_ENDPOINT.md](./DASHBOARD_ENDPOINT.md)
-- Guía de testing: [IMPLEMENTACION_DASHBOARD.md](./IMPLEMENTACION_DASHBOARD.md)
-- Arquitectura general: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- Documentación técnica: [dashboard-endpoint.md](./dashboard-endpoint.md)
+- Guía de testing: [dashboard-implementation.md](./dashboard-implementation.md)
+- Arquitectura general: [ADR-001](../adr/ADR-001-bff-composicion-lecturas.md)
 
 ---
 
