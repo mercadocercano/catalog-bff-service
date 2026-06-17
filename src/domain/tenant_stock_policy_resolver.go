@@ -2,8 +2,9 @@ package domain
 
 import (
 	"context"
-	"log"
 	"os"
+
+	"catalog-bff-service/src/domain/port"
 )
 
 // TenantConfigClient define el contrato para obtener configuraciones de tenant
@@ -15,7 +16,8 @@ type TenantConfigClient interface {
 // TenantStockPolicyResolver resuelve la Stock Policy de un tenant
 // consultando el tenant-service
 type TenantStockPolicyResolver struct {
-	client TenantConfigClient
+	client    TenantConfigClient
+	eventLog  port.CatalogBFFEventLogger
 }
 
 // NewTenantStockPolicyResolver crea una nueva instancia del resolver
@@ -25,8 +27,23 @@ func NewTenantStockPolicyResolver(client TenantConfigClient) *TenantStockPolicyR
 	}
 }
 
+// NewTenantStockPolicyResolverWithLogger crea una instancia del resolver con logger canónico (ADR-001)
+func NewTenantStockPolicyResolverWithLogger(client TenantConfigClient, eventLog port.CatalogBFFEventLogger) *TenantStockPolicyResolver {
+	return &TenantStockPolicyResolver{
+		client:   client,
+		eventLog: eventLog,
+	}
+}
+
+// logEvent emite un evento canónico si el logger está configurado; no-op en caso contrario.
+func (r *TenantStockPolicyResolver) logEvent(e port.CatalogBFFEvent) {
+	if r.eventLog != nil {
+		r.eventLog.Log(e)
+	}
+}
+
 // Resolve obtiene la Stock Policy del tenant desde tenant-service
-// 
+//
 // Comportamiento:
 // - Consulta tenant-service por la key "catalog.stock_policy"
 // - Si responde con valor válido, lo convierte a StockPolicy
@@ -35,18 +52,34 @@ func NewTenantStockPolicyResolver(client TenantConfigClient) *TenantStockPolicyR
 func (r *TenantStockPolicyResolver) Resolve(ctx context.Context, tenantID string) StockPolicy {
 	// Permitir override por env var para testing/desarrollo
 	if forcedPolicy := os.Getenv("FORCE_STOCK_POLICY"); forcedPolicy != "" {
-		log.Printf("[TenantStockPolicyResolver] Using forced policy from env: %s", forcedPolicy)
 		switch forcedPolicy {
 		case "IGNORE_STOCK":
+			r.logEvent(port.CatalogBFFEvent{
+				Event:    "catalog_bff.stock_policy_resolved",
+				TenantID: tenantID,
+				Policy:   "IGNORE_STOCK",
+				Reason:   "forced_by_env",
+			})
 			return IgnoreStock
 		case "REQUIRE_STOCK":
+			r.logEvent(port.CatalogBFFEvent{
+				Event:    "catalog_bff.stock_policy_resolved",
+				TenantID: tenantID,
+				Policy:   "REQUIRE_STOCK",
+				Reason:   "forced_by_env",
+			})
 			return RequireStock
 		}
 	}
 
 	// Si no hay client configurado, fallback
 	if r.client == nil {
-		log.Printf("[TenantStockPolicyResolver] No tenant client configured, using default: REQUIRE_STOCK")
+		r.logEvent(port.CatalogBFFEvent{
+			Event:    "catalog_bff.stock_policy_resolved",
+			TenantID: tenantID,
+			Policy:   "REQUIRE_STOCK",
+			Reason:   "no_client_configured",
+		})
 		return RequireStock
 	}
 
@@ -54,27 +87,52 @@ func (r *TenantStockPolicyResolver) Resolve(ctx context.Context, tenantID string
 	value, err := r.client.GetConfig(ctx, tenantID, "catalog.stock_policy")
 	if err != nil {
 		// Error al consultar: loggear y usar fallback
-		log.Printf("[TenantStockPolicyResolver] Error fetching policy for tenant %s: %v. Using fallback: REQUIRE_STOCK", tenantID, err)
+		r.logEvent(port.CatalogBFFEvent{
+			Event:    "catalog_bff.stock_policy_fetch_failed",
+			TenantID: tenantID,
+			Policy:   "REQUIRE_STOCK",
+			Reason:   err.Error(),
+		})
 		return RequireStock
 	}
 
 	// Si no existe configuración (value vacío), usar fallback
 	if value == "" {
-		log.Printf("[TenantStockPolicyResolver] No policy configured for tenant %s. Using fallback: REQUIRE_STOCK", tenantID)
+		r.logEvent(port.CatalogBFFEvent{
+			Event:    "catalog_bff.stock_policy_resolved",
+			TenantID: tenantID,
+			Policy:   "REQUIRE_STOCK",
+			Reason:   "no_policy_configured",
+		})
 		return RequireStock
 	}
 
 	// Mapear valor a StockPolicy
 	switch value {
 	case "IGNORE_STOCK":
-		log.Printf("[TenantStockPolicyResolver] Tenant %s policy: IGNORE_STOCK", tenantID)
+		r.logEvent(port.CatalogBFFEvent{
+			Event:    "catalog_bff.stock_policy_resolved",
+			TenantID: tenantID,
+			Policy:   "IGNORE_STOCK",
+			Reason:   "tenant_config",
+		})
 		return IgnoreStock
 	case "REQUIRE_STOCK", "VALIDATE_STOCK":
-		log.Printf("[TenantStockPolicyResolver] Tenant %s policy: REQUIRE_STOCK", tenantID)
+		r.logEvent(port.CatalogBFFEvent{
+			Event:    "catalog_bff.stock_policy_resolved",
+			TenantID: tenantID,
+			Policy:   "REQUIRE_STOCK",
+			Reason:   "tenant_config",
+		})
 		return RequireStock
 	default:
 		// Valor desconocido: loggear warning y usar fallback
-		log.Printf("[TenantStockPolicyResolver] Unknown policy value '%s' for tenant %s. Using fallback: REQUIRE_STOCK", value, tenantID)
+		r.logEvent(port.CatalogBFFEvent{
+			Event:    "catalog_bff.stock_policy_resolved",
+			TenantID: tenantID,
+			Policy:   "REQUIRE_STOCK",
+			Reason:   "unknown_value:" + value,
+		})
 		return RequireStock
 	}
 }

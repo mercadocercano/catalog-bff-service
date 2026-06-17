@@ -13,6 +13,7 @@ import (
 	"catalog-bff-service/src/domain"
 	"catalog-bff-service/src/handler"
 	"catalog-bff-service/src/infrastructure/cache"
+	bfflogging "catalog-bff-service/src/infrastructure/logging"
 	"catalog-bff-service/src/infrastructure/stock/client"
 	tenantclient "catalog-bff-service/src/infrastructure/tenant/client"
 	tenant_dashboard "catalog-bff-service/src/tenant_dashboard"
@@ -55,17 +56,20 @@ func main() {
 	tenantConfigCache := cache.NewInMemoryCache[string](tenantConfigTTL, cacheCleanupInterval)
 	stockCache := cache.NewInMemoryCache[*client.StockAvailability](stockAvailabilityTTL, cacheCleanupInterval)
 
+	// Logger canónico del BFF (ADR-001) — se crea antes del resolver para inyectarlo
+	bffLogger := bfflogging.NewCatalogBFFLogger("catalog-bff")
+
 	// Inicializar Tenant Config Client con cache
 	var policyResolver *domain.TenantStockPolicyResolver
 	if tenantServiceURL != "" {
 		log.Printf("Tenant Service configurado en: %s", tenantServiceURL)
 		baseTenantClient := tenantclient.NewHTTPTenantConfigClient(tenantServiceURL)
 		cachedTenantClient := tenantclient.NewCachedTenantConfigClient(baseTenantClient, tenantConfigCache)
-		policyResolver = domain.NewTenantStockPolicyResolver(cachedTenantClient)
+		policyResolver = domain.NewTenantStockPolicyResolverWithLogger(cachedTenantClient, bffLogger)
 	} else {
-		log.Println("⚠️  TENANT_SERVICE_URL no configurado. Usando fallback: REQUIRE_STOCK")
-		// Crear resolver sin client (usará fallback)
-		policyResolver = domain.NewTenantStockPolicyResolver(nil)
+		log.Println("TENANT_SERVICE_URL no configurado. Usando fallback: REQUIRE_STOCK")
+		// Crear resolver sin client (usará fallback); logger canónico inyectado
+		policyResolver = domain.NewTenantStockPolicyResolverWithLogger(nil, bffLogger)
 	}
 
 	// Inicializar Stock Client con cache
@@ -80,7 +84,7 @@ func main() {
 	)
 
 	// Handlers para backoffice CRUD
-	productHandler := handler.NewProductHandler(pimServiceURL)
+	productHandler := handler.NewProductHandlerWithLogger(pimServiceURL, bffLogger)
 	variantHandler := handler.NewProductVariantHandler(pimServiceURL, cachedStockClient)
 
 	// Handler de inventario (orquesta Stock + PIM)
@@ -88,15 +92,15 @@ func main() {
 
 	// Handler para admin dashboard
 	dashboardService := admin.NewDashboardService(pimServiceURL, iamServiceURL, tenantServiceURL)
-	adminHandler := admin.NewHandler(dashboardService)
+	adminHandler := admin.NewHandlerWithLogger(dashboardService, bffLogger)
 
 	// Handler para tenant dashboard (orquesta PIM + Stock con scope de tenant)
 	tenantDashboardService := tenant_dashboard.NewService(pimServiceURL, stockServiceURL)
-	tenantDashboardHandler := tenant_dashboard.NewHandler(tenantDashboardService)
+	tenantDashboardHandler := tenant_dashboard.NewHandlerWithLogger(tenantDashboardService, bffLogger)
 
 	// Handler para marketplace (cross-tenant, endpoints públicos)
 	s2sAPIKey := env.Get("S2S_API_KEY", "s2s-internal")
-	marketplaceHandler := handler.NewMarketplaceHandler(pimServiceURL, iamServiceURL, s2sAPIKey)
+	marketplaceHandler := handler.NewMarketplaceHandlerWithLogger(pimServiceURL, iamServiceURL, s2sAPIKey, bffLogger)
 
 	// API v1
 	v1 := router.Group("/api/v1")

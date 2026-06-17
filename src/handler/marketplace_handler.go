@@ -4,13 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hornosg/go-shared/infrastructure/response"
+
+	"catalog-bff-service/src/domain/port"
 )
 
 // MarketplaceHandler orquesta PIM + IAM Service para endpoints del marketplace
@@ -19,6 +20,7 @@ type MarketplaceHandler struct {
 	iamServiceURL string
 	s2sAPIKey     string
 	httpClient    *http.Client
+	logger        port.CatalogBFFEventLogger
 
 	// Cache de tenants (se refresca cada 5 minutos)
 	tenantCache   map[string]string // tenant_id → name
@@ -34,6 +36,24 @@ func NewMarketplaceHandler(pimServiceURL, iamServiceURL, s2sAPIKey string) *Mark
 		s2sAPIKey:     s2sAPIKey,
 		httpClient:    &http.Client{Timeout: 5 * time.Second},
 		tenantCache:   make(map[string]string),
+	}
+}
+
+// NewMarketplaceHandlerWithLogger crea el handler inyectando el logger canónico.
+func NewMarketplaceHandlerWithLogger(pimServiceURL, iamServiceURL, s2sAPIKey string, logger port.CatalogBFFEventLogger) *MarketplaceHandler {
+	return &MarketplaceHandler{
+		pimServiceURL: pimServiceURL,
+		iamServiceURL: iamServiceURL,
+		s2sAPIKey:     s2sAPIKey,
+		httpClient:    &http.Client{Timeout: 5 * time.Second},
+		tenantCache:   make(map[string]string),
+		logger:        logger,
+	}
+}
+
+func (h *MarketplaceHandler) log(e port.CatalogBFFEvent) {
+	if h.logger != nil {
+		h.logger.Log(e)
 	}
 }
 
@@ -328,21 +348,33 @@ func (h *MarketplaceHandler) getTenantNames(c *gin.Context) map[string]string {
 	names := make(map[string]string)
 
 	if h.iamServiceURL == "" {
-		log.Println("IAM Service URL no configurada, tenant_name no disponible")
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "iam",
+			Reason:          "IAM_SERVICE_URL not configured, tenant_name unavailable",
+		})
 		return names
 	}
 
 	url := fmt.Sprintf("%s/api/v1/tenants?page=1&page_size=200", h.iamServiceURL)
 	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, url, nil)
 	if err != nil {
-		log.Printf("Error creando request a tenant-service: %v", err)
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "iam",
+			Reason:          err.Error(),
+		})
 		return names
 	}
 	req.Header.Set("X-API-Key", h.s2sAPIKey)
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		log.Printf("Error llamando a tenant-service: %v", err)
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "iam",
+			Reason:          err.Error(),
+		})
 		return names
 	}
 	defer resp.Body.Close()
@@ -354,7 +386,11 @@ func (h *MarketplaceHandler) getTenantNames(c *gin.Context) map[string]string {
 
 	var tenantResp tenantServiceResponse
 	if err := json.Unmarshal(body, &tenantResp); err != nil {
-		log.Printf("Error parseando respuesta de tenant-service: %v", err)
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "iam",
+			Reason:          err.Error(),
+		})
 		return names
 	}
 
@@ -368,7 +404,10 @@ func (h *MarketplaceHandler) getTenantNames(c *gin.Context) map[string]string {
 	h.cacheExpiry = time.Now().Add(5 * time.Minute)
 	h.tenantCacheMu.Unlock()
 
-	log.Printf("Tenant cache refreshed: %d tenants", len(names))
+	h.log(port.CatalogBFFEvent{
+		Event: "catalog_bff.tenant_cache_refreshed",
+		Count: len(names),
+	})
 	return names
 }
 
@@ -414,7 +453,11 @@ func (h *MarketplaceHandler) fetchFromPIM(c *gin.Context, path string) ([]byte, 
 func (h *MarketplaceHandler) proxyToPIM(c *gin.Context, path string) {
 	body, statusCode, err := h.fetchFromPIM(c, path)
 	if err != nil {
-		log.Printf("Error proxy PIM %s: %v", path, err)
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "pim",
+			Reason:          err.Error(),
+		})
 		response.JSON(c, http.StatusBadGateway, err.Error())
 		return
 	}

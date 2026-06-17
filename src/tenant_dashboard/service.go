@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -35,7 +34,6 @@ func (s *Service) GetDashboard(ctx context.Context, tenantID, authHeader string)
 		inventory dto.InventorySummaryResponse
 		wg        sync.WaitGroup
 		mu        sync.Mutex
-		invErr    error
 	)
 
 	wg.Add(2)
@@ -52,20 +50,13 @@ func (s *Service) GetDashboard(ctx context.Context, tenantID, authHeader string)
 		defer wg.Done()
 		inv, err := s.getInventorySummary(ctx, tenantID, authHeader)
 		mu.Lock()
-		if err != nil {
-			log.Printf("⚠️ Error obteniendo inventario: %v", err)
-			invErr = err
-		} else {
+		if err == nil {
 			inventory = *inv
 		}
 		mu.Unlock()
 	}()
 
 	wg.Wait()
-
-	if invErr != nil {
-		log.Printf("⚠️ Inventory falló, devolviendo datos parciales")
-	}
 
 	return &TenantDashboardResponse{
 		Catalog:   catalog,
@@ -243,7 +234,6 @@ func (s *Service) getInventorySummary(ctx context.Context, tenantID, authHeader 
 func (s *Service) makeRequest(ctx context.Context, url, tenantID, authHeader string) []byte {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		log.Printf("❌ Error creando request a %s: %v", url, err)
 		return nil
 	}
 	req.Header.Set("X-Tenant-ID", tenantID)
@@ -253,19 +243,16 @@ func (s *Service) makeRequest(ctx context.Context, url, tenantID, authHeader str
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		log.Printf("❌ Error en request a %s: %v", url, err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("⚠️ Request a %s retornó status %d", url, resp.StatusCode)
 		return nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("❌ Error leyendo response de %s: %v", url, err)
 		return nil
 	}
 

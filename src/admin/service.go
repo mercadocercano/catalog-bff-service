@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -196,7 +195,6 @@ func (s *DashboardService) getTenantStats(ctx context.Context) TenantStats {
 	}
 
 	if s.tenantServiceURL == "" {
-		log.Println("⚠️ Tenant Service URL no configurado, retornando stats vacíos")
 		return stats
 	}
 
@@ -275,9 +273,7 @@ func (s *DashboardService) getServicesHealth(ctx context.Context) []ServiceHealt
 			latency := int64(0)
 
 			req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
-			if err != nil {
-				log.Printf("❌ Error creando request para %s: %v", name, err)
-			} else {
+			if err == nil {
 				resp, err := s.httpClient.Do(req)
 				latency = time.Since(start).Milliseconds()
 				
@@ -311,25 +307,21 @@ func (s *DashboardService) getServicesHealth(ctx context.Context) []ServiceHealt
 func (s *DashboardService) makeRequest(ctx context.Context, url string) []byte {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		log.Printf("❌ Error creando request a %s: %v", url, err)
 		return nil
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		log.Printf("❌ Error haciendo request a %s: %v", url, err)
 		return nil
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		log.Printf("⚠️ Request a %s retornó status %d", url, resp.StatusCode)
 		return nil
 	}
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Printf("❌ Error leyendo response de %s: %v", url, err)
 		return nil
 	}
 

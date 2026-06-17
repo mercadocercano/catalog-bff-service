@@ -1,16 +1,18 @@
 package admin
 
 import (
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+
+	"catalog-bff-service/src/domain/port"
 )
 
 // Handler maneja las peticiones del dashboard de administración
 type Handler struct {
 	service *DashboardService
+	logger  port.CatalogBFFEventLogger
 }
 
 // NewHandler crea un nuevo handler de administración
@@ -20,17 +22,29 @@ func NewHandler(service *DashboardService) *Handler {
 	}
 }
 
+// NewHandlerWithLogger crea un handler inyectando el logger canónico.
+func NewHandlerWithLogger(service *DashboardService, logger port.CatalogBFFEventLogger) *Handler {
+	return &Handler{service: service, logger: logger}
+}
+
+func (h *Handler) log(e port.CatalogBFFEvent) {
+	if h.logger != nil {
+		h.logger.Log(e)
+	}
+}
+
 // GetDashboardStats obtiene las estadísticas consolidadas del dashboard
 // GET /api/v1/admin/dashboard/stats
 func (h *Handler) GetDashboardStats(c *gin.Context) {
 	start := time.Now()
 	ctx := c.Request.Context()
 
-	log.Println("📊 Obteniendo estadísticas del dashboard...")
-
 	stats, err := h.service.GetDashboardStats(ctx)
 	if err != nil {
-		log.Printf("❌ Error obteniendo stats: %v", err)
+		h.log(port.CatalogBFFEvent{
+			Event:  "catalog_bff.dashboard_stats_failed",
+			Reason: err.Error(),
+		})
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error":   "internal_error",
 			"message": "Error al obtener estadísticas del dashboard",
@@ -39,21 +53,11 @@ func (h *Handler) GetDashboardStats(c *gin.Context) {
 	}
 
 	elapsed := time.Since(start)
-	log.Printf("✅ Dashboard stats obtenidos en %v", elapsed)
-	log.Printf("   - Curación: %d pending, %d approved today, %d rejected today",
-		stats.Curation.Pending,
-		stats.Curation.ApprovedToday,
-		stats.Curation.RejectedToday)
-	log.Printf("   - Catálogo: %d productos, %d variantes, %d activos, %d categorías",
-		stats.Catalog.TotalProducts,
-		stats.Catalog.TotalVariants,
-		stats.Catalog.ActiveProducts,
-		stats.Catalog.CategoriesCount)
-	log.Printf("   - Tenants: %d total, %d activos, %d nuevos este mes",
-		stats.Tenants.Total,
-		stats.Tenants.Active,
-		stats.Tenants.NewThisMonth)
-	log.Printf("   - Servicios: %d verificados", len(stats.Services))
+	h.log(port.CatalogBFFEvent{
+		Event:      "catalog_bff.dashboard_stats_fetched",
+		DurationMs: elapsed.Milliseconds(),
+		Count:      len(stats.Services),
+	})
 
 	c.JSON(http.StatusOK, stats)
 }

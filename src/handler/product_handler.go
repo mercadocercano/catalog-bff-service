@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	
+
+	"catalog-bff-service/src/domain/port"
 	"catalog-bff-service/src/dto"
 )
 
@@ -18,6 +18,7 @@ import (
 type ProductHandler struct {
 	pimServiceURL string
 	httpClient    *http.Client
+	logger        port.CatalogBFFEventLogger
 }
 
 // NewProductHandler crea un nuevo handler de productos
@@ -25,6 +26,21 @@ func NewProductHandler(pimServiceURL string) *ProductHandler {
 	return &ProductHandler{
 		pimServiceURL: pimServiceURL,
 		httpClient:    &http.Client{},
+	}
+}
+
+// NewProductHandlerWithLogger crea el handler inyectando el logger canónico.
+func NewProductHandlerWithLogger(pimServiceURL string, logger port.CatalogBFFEventLogger) *ProductHandler {
+	return &ProductHandler{
+		pimServiceURL: pimServiceURL,
+		httpClient:    &http.Client{},
+		logger:        logger,
+	}
+}
+
+func (h *ProductHandler) log(e port.CatalogBFFEvent) {
+	if h.logger != nil {
+		h.logger.Log(e)
 	}
 }
 
@@ -189,8 +205,14 @@ func (h *ProductHandler) GetProduct(c *gin.Context) {
 	// Obtener variantes del producto
 	variants, err := h.getProductVariants(productID, tenantID, c.GetHeader("Authorization"))
 	if err != nil {
-		// Log error pero continuar sin variantes
-		log.Printf("⚠️ Error obteniendo variantes para producto %s: %v", productID, err)
+		// Degradación tolerable: continuamos sin variantes
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			TenantID:        tenantID,
+			UpstreamService: "pim",
+			ProductID:       productID,
+			Reason:          err.Error(),
+		})
 		variants = []dto.VariantSummary{}
 	}
 
@@ -248,8 +270,6 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 	// Mapear a request de PIM
 	pimReq := h.mapToPIMCreateRequest(req)
 
-	log.Printf("Creating product with %d variants", len(req.Variants))
-
 	// Llamar a PIM Service
 	pimURL := fmt.Sprintf("%s/api/v1/products", h.pimServiceURL)
 	body, _ := json.Marshal(pimReq)
@@ -299,51 +319,57 @@ func (h *ProductHandler) CreateProduct(c *gin.Context) {
 
 	// Si se enviaron variantes, crearlas
 	if len(req.Variants) > 0 {
-		log.Printf("🔧 Creando %d variantes para producto %s", len(req.Variants), pimResp.ID)
-		for i, variant := range req.Variants {
-			// Construir request para PIM (endpoint /product-variants)
-			// NO enviar is_default - el PIM decide
+		for _, variant := range req.Variants {
 			variantReq := map[string]interface{}{
 				"product_id": pimResp.ID,
 				"name":       variant.Name,
 				"sku":        variant.SKU,
 			}
-			
-			// Agregar atributos si existen
 			if len(variant.Attributes) > 0 {
 				variantReq["attributes"] = variant.Attributes
 			}
-			
+
 			variantURL := fmt.Sprintf("%s/api/v1/product-variants", h.pimServiceURL)
 			variantBody, _ := json.Marshal(variantReq)
-			
-			log.Printf("🔧 Variante %d: %s", i+1, string(variantBody))
-			
+
 			httpReq, _ := http.NewRequest("POST", variantURL, bytes.NewBuffer(variantBody))
 			httpReq.Header.Set("Content-Type", "application/json")
 			httpReq.Header.Set("X-Tenant-ID", tenantID)
 			if authHeader := c.GetHeader("Authorization"); authHeader != "" {
 				httpReq.Header.Set("Authorization", authHeader)
 			}
-			
+
 			variantResp, err := h.httpClient.Do(httpReq)
 			if err != nil {
-				log.Printf("❌ Error creando variante %d: %v", i+1, err)
+				h.log(port.CatalogBFFEvent{
+					Event:           "catalog_bff.upstream_failed",
+					TenantID:        tenantID,
+					UpstreamService: "pim",
+					ProductID:       pimResp.ID,
+					Reason:          err.Error(),
+				})
 				continue
 			}
-			
 			if variantResp.StatusCode != http.StatusCreated {
 				respBody, _ := io.ReadAll(variantResp.Body)
-				log.Printf("❌ Error en PIM al crear variante %d: %s", i+1, string(respBody))
-			} else {
-				log.Printf("✅ Variante %d creada exitosamente", i+1)
+				h.log(port.CatalogBFFEvent{
+					Event:           "catalog_bff.upstream_failed",
+					TenantID:        tenantID,
+					UpstreamService: "pim",
+					ProductID:       pimResp.ID,
+					Reason:          string(respBody),
+				})
 			}
-			
 			variantResp.Body.Close()
 		}
-	} else {
-		log.Printf("⚠️ No se enviaron variantes en el request")
 	}
+
+	h.log(port.CatalogBFFEvent{
+		Event:     "catalog_bff.product_created",
+		TenantID:  tenantID,
+		ProductID: pimResp.ID,
+		Count:     len(req.Variants),
+	})
 
 	response := dto.ProductCreatedResponse{
 		ID:        pimResp.ID,
@@ -440,35 +466,26 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 
 	// Si se enviaron variantes, actualizarlas (A2)
 	if len(req.Variants) > 0 {
-		log.Printf("🔧 Actualizando %d variantes", len(req.Variants))
-		for i, variant := range req.Variants {
+		for _, variant := range req.Variants {
 			if variant.ID == "" {
-				log.Printf("⚠️ Variante %d sin ID, saltando", i+1)
 				continue
 			}
 
 			variantURL := fmt.Sprintf("%s/api/v1/product-variants/%s?product_id=%s", h.pimServiceURL, variant.ID, productID)
-			
-			// Construir payload con todos los campos necesarios
+
 			variantReq := map[string]interface{}{
 				"name":  variant.Name,
 				"price": variant.Price,
 				"stock": variant.Stock,
 			}
-			
-			// SKU es opcional pero debe cumplir min si se envía
 			if variant.SKU != "" {
 				variantReq["sku"] = variant.SKU
 			}
-			
-			// Atributos si existen
 			if len(variant.Attributes) > 0 {
 				variantReq["attributes"] = variant.Attributes
 			}
-			
-			variantBody, _ := json.Marshal(variantReq)
 
-			log.Printf("🔧 Actualizando variante %d (%s): price=%v", i+1, variant.ID, variant.Price)
+			variantBody, _ := json.Marshal(variantReq)
 
 			httpReq, _ := http.NewRequest("PUT", variantURL, bytes.NewBuffer(variantBody))
 			httpReq.Header.Set("Content-Type", "application/json")
@@ -479,17 +496,25 @@ func (h *ProductHandler) UpdateProduct(c *gin.Context) {
 
 			variantResp, err := h.httpClient.Do(httpReq)
 			if err != nil {
-				log.Printf("❌ Error actualizando variante %d: %v", i+1, err)
+				h.log(port.CatalogBFFEvent{
+					Event:           "catalog_bff.upstream_failed",
+					TenantID:        tenantID,
+					UpstreamService: "pim",
+					ProductID:       productID,
+					Reason:          err.Error(),
+				})
 				continue
 			}
-
 			if variantResp.StatusCode != http.StatusOK {
 				respBody, _ := io.ReadAll(variantResp.Body)
-				log.Printf("❌ PIM error al actualizar variante %d: %s", i+1, string(respBody))
-			} else {
-				log.Printf("✅ Variante %d actualizada exitosamente", i+1)
+				h.log(port.CatalogBFFEvent{
+					Event:           "catalog_bff.upstream_failed",
+					TenantID:        tenantID,
+					UpstreamService: "pim",
+					ProductID:       productID,
+					Reason:          string(respBody),
+				})
 			}
-
 			variantResp.Body.Close()
 		}
 	}
@@ -566,15 +591,13 @@ func (h *ProductHandler) getProductVariants(productID, tenantID, authHeader stri
 
 	resp, err := h.httpClient.Do(req)
 	if err != nil {
-		log.Printf("❌ Error llamando a PIM variants: %v", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		bodyBytes, _ := io.ReadAll(resp.Body)
-		log.Printf("❌ PIM devolvió %d para variantes: %s", resp.StatusCode, string(bodyBytes))
-		return nil, fmt.Errorf("error getting variants: %d", resp.StatusCode)
+		return nil, fmt.Errorf("error getting variants: %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	// El PIM devuelve {variants: [...], pagination: {...}}
@@ -583,12 +606,10 @@ func (h *ProductHandler) getProductVariants(productID, tenantID, authHeader stri
 		Pagination map[string]interface{}   `json:"pagination"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&pimResp); err != nil {
-		log.Printf("❌ Error parseando variantes: %v", err)
 		return nil, err
 	}
-	
+
 	variants := pimResp.Variants
-	log.Printf("✅ Cargadas %d variantes para producto %s", len(variants), productID)
 
 	// Mapear a VariantSummary
 	result := make([]dto.VariantSummary, len(variants))
