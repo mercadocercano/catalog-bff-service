@@ -47,3 +47,6 @@ tmp/
 # Engram
 .engram/engram.db
 .engram/*.db-*
+
+# Memoria de agente (artefacto interno, no publicar)
+memory/

@@ -1,3 +1,15 @@
+---
+adr: ADR-001
+status: accepted
+skills:
+  implement:
+    - dev/hexagonal-go
+    - dev/kong
+  verify:
+    - dev/go-hex-audit
+    - dev/code-reviewer
+    - dev/inter-service-contracts
+---
 # ADR-001: catalog-bff-service como servicio de composición de lecturas
 
 **Estado**: Aceptado
