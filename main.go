@@ -31,6 +31,7 @@ func main() {
 			"/metrics",
 			"/api/v1/marketplace*",
 		},
+		RejectMissingTenant: true, // cierre de bypass de tenant (rollout verificado 2026-06-19)
 	}))
 
 	// Health check
