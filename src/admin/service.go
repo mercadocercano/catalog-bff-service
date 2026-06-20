@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 )
@@ -16,6 +17,7 @@ type DashboardService struct {
 	iamServiceURL    string
 	tenantServiceURL string
 	httpClient       *http.Client
+	s2sAPIKey        string
 }
 
 // NewDashboardService crea una nueva instancia del servicio de dashboard
@@ -27,6 +29,7 @@ func NewDashboardService(pimURL, iamURL, tenantURL string) *DashboardService {
 		httpClient: &http.Client{
 			Timeout: 2 * time.Second, // Timeout de 2 segundos por servicio
 		},
+		s2sAPIKey: os.Getenv("S2S_API_KEY"),
 	}
 }
 
@@ -308,6 +311,11 @@ func (s *DashboardService) makeRequest(ctx context.Context, url string) []byte {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil
+	}
+	// Auth S2S: IAM ahora exige X-API-Key (o JWT con rol) en /tenants tras cerrar
+	// el fallback anónimo de Kong. Sin esto, getTenantStats recibiría 401.
+	if s.s2sAPIKey != "" {
+		req.Header.Set("X-API-Key", s.s2sAPIKey)
 	}
 
 	resp, err := s.httpClient.Do(req)
