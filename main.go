@@ -95,6 +95,10 @@ func main() {
 	dashboardService := admin.NewDashboardService(pimServiceURL, iamServiceURL, tenantServiceURL)
 	adminHandler := admin.NewHandlerWithLogger(dashboardService, bffLogger)
 
+	// Handler para admin global catalog (passthrough a PIM, MC-E34)
+	globalCatalogAdminService := admin.NewGlobalCatalogService(pimServiceURL)
+	globalCatalogAdminHandler := admin.NewGlobalCatalogHandlerWithLogger(globalCatalogAdminService, bffLogger)
+
 	// Handler para tenant dashboard (orquesta PIM + Stock con scope de tenant)
 	tenantDashboardService := tenant_dashboard.NewService(pimServiceURL, stockServiceURL)
 	tenantDashboardHandler := tenant_dashboard.NewHandlerWithLogger(tenantDashboardService, bffLogger)
@@ -144,6 +148,8 @@ func main() {
 		adminGroup := v1.Group("/admin")
 		{
 			adminGroup.GET("/dashboard/stats", adminHandler.GetDashboardStats)
+			adminGroup.GET("/global-catalog/products", globalCatalogAdminHandler.ListProducts)
+			adminGroup.POST("/global-catalog/products/bulk-verify", globalCatalogAdminHandler.BulkVerify)
 		}
 
 		// Endpoints de tenant dashboard (PIM + Stock orquestado por tenant)
