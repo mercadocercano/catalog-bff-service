@@ -14,6 +14,10 @@ services:
       - STOCK_SERVICE_URL=http://mc-stock-service:8080
       - TENANT_SERVICE_URL=http://mc-tenant-service:8120
       - IAM_SERVICE_URL=http://mc-iam-service:8080
+      # ACC-E04 T5: config del tenant contra account-service (container_name del IAM en lab-network).
+      # La key debe coincidir con S2S_KEY_CATALOG_BFF de account-service (scope config:read).
+      - ACCOUNT_SERVICE_URL=http://account-service:8080
+      - ACCOUNT_SERVICE_S2S_KEY=${S2S_KEY_CATALOG_BFF:-}
     networks:
       - lab-network
 

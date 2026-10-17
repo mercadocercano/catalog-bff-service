@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -40,15 +41,28 @@ func (h *GlobalCatalogHandler) ListProducts(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	operatorID := c.GetHeader("X-Operator-Id")
 
-	body, err := h.service.ListProducts(ctx, c.Request.URL.Query(), authHeader, operatorID)
+	statusCode, body, err := h.service.ListProducts(ctx, c.Request.URL.Query(), authHeader, operatorID)
 	elapsed := time.Since(start)
 
 	if err != nil {
+		// Falla de transporte: no hubo respuesta del upstream → 502.
 		h.log(port.CatalogBFFEvent{
 			Event:  "catalog_bff.admin_global_catalog_list_failed",
 			Reason: err.Error(),
 		})
 		c.Data(http.StatusBadGateway, "application/json", body)
+		return
+	}
+
+	if statusCode >= 400 {
+		// El upstream respondió con un error (401/403/404/…). Preservar el status code:
+		// un tenant sin rol system_admin debe ver 403, no un 502 que enmascara la denegación
+		// de autorización que catalog-service ya decidió (D3.1 — el BFF es passthrough).
+		h.log(port.CatalogBFFEvent{
+			Event:  "catalog_bff.admin_global_catalog_list_upstream_error",
+			Reason: fmt.Sprintf("upstream status %d", statusCode),
+		})
+		c.Data(statusCode, "application/json", body)
 		return
 	}
 
@@ -77,7 +91,7 @@ func (h *GlobalCatalogHandler) BulkVerify(c *gin.Context) {
 		return
 	}
 
-	respBody, err := h.service.BulkVerify(ctx, body, authHeader, operatorID)
+	statusCode, respBody, err := h.service.BulkVerify(ctx, body, authHeader, operatorID)
 	elapsed := time.Since(start)
 
 	if err != nil {
@@ -86,6 +100,15 @@ func (h *GlobalCatalogHandler) BulkVerify(c *gin.Context) {
 			Reason: err.Error(),
 		})
 		c.Data(http.StatusBadGateway, "application/json", respBody)
+		return
+	}
+
+	if statusCode >= 400 {
+		h.log(port.CatalogBFFEvent{
+			Event:  "catalog_bff.admin_global_catalog_bulk_verify_upstream_error",
+			Reason: fmt.Sprintf("upstream status %d", statusCode),
+		})
+		c.Data(statusCode, "application/json", respBody)
 		return
 	}
 

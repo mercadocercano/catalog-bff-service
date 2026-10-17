@@ -29,7 +29,15 @@ func main() {
 			"/health",
 			"/api/v1/health",
 			"/metrics",
-			"/api/v1/marketplace*",
+			// PLAT-E39 T8c2 (D7/D3.3): el wildcard anónimo "/api/v1/marketplace*" (el bypass que
+			// motivó esta épica, §"Por qué existe") se ELIMINÓ. Quedan exceptuadas SÓLO las rutas de
+			// `categories`, migradas al endpoint público anónimo de catalog-service — tráfico
+			// legítimamente público (espejo de T6d2/T8c1, allowlist D7, sin JWT ni X-User-Role).
+			// Exceptuar por ruta exacta (no wildcard) deja al resto de rutas marketplace
+			// (products/stores/store-types, cross-tenant, sin consumidor en vivo — consumers reales
+			// van a PIM vía Kong `/pim/...`) pasando por TenantValidation normal: cierre del bypass.
+			"/api/v1/marketplace/categories",
+			"/api/v1/marketplace/categories/tree",
 		},
 		RejectMissingTenant: true, // cierre de bypass de tenant (rollout verificado 2026-06-19)
 	}))
@@ -41,8 +49,14 @@ func main() {
 
 	// Configuración de servicios
 	pimServiceURL := env.Get("PIM_SERVICE_URL", "http://localhost:8090")
+	catalogServiceURL := env.Get("CATALOG_SERVICE_URL", "http://localhost:8160")
 	stockServiceURL := env.Get("STOCK_SERVICE_URL", "http://localhost:8100")
-	tenantServiceURL := env.Get("TENANT_SERVICE_URL", "")
+	tenantServiceURL := env.Get("TENANT_SERVICE_URL", "") // sólo health/stats del dashboard admin
+	// ACC-E04 T5: la config del tenant (catalog.stock_policy) vive en account-service
+	// (platform/iam-service, módulo tenancy). Credencial S2S propia del BFF con scope
+	// config:read (ADR-005 DD-1 b); del lado servidor es S2S_KEY_CATALOG_BFF.
+	accountServiceURL := env.Get("ACCOUNT_SERVICE_URL", "")
+	accountServiceS2SKey := env.Get("ACCOUNT_SERVICE_S2S_KEY", "")
 	iamServiceURL := env.Get("IAM_SERVICE_URL", "http://localhost:8080")
 
 	// Configuración de cache (TTLs configurables por env)
@@ -62,13 +76,16 @@ func main() {
 
 	// Inicializar Tenant Config Client con cache
 	var policyResolver *domain.TenantStockPolicyResolver
-	if tenantServiceURL != "" {
-		log.Printf("Tenant Service configurado en: %s", tenantServiceURL)
-		baseTenantClient := tenantclient.NewHTTPTenantConfigClient(tenantServiceURL)
+	if accountServiceURL != "" {
+		log.Printf("Account Service (tenant config) configurado en: %s", accountServiceURL)
+		if accountServiceS2SKey == "" {
+			log.Println("ACCOUNT_SERVICE_S2S_KEY vacía: account-service responderá 401 y la policy caerá a REQUIRE_STOCK")
+		}
+		baseTenantClient := tenantclient.NewHTTPTenantConfigClient(accountServiceURL, accountServiceS2SKey)
 		cachedTenantClient := tenantclient.NewCachedTenantConfigClient(baseTenantClient, tenantConfigCache)
 		policyResolver = domain.NewTenantStockPolicyResolverWithLogger(cachedTenantClient, bffLogger)
 	} else {
-		log.Println("TENANT_SERVICE_URL no configurado. Usando fallback: REQUIRE_STOCK")
+		log.Println("ACCOUNT_SERVICE_URL no configurado. Usando fallback: REQUIRE_STOCK")
 		// Crear resolver sin client (usará fallback); logger canónico inyectado
 		policyResolver = domain.NewTenantStockPolicyResolverWithLogger(nil, bffLogger)
 	}
@@ -95,8 +112,9 @@ func main() {
 	dashboardService := admin.NewDashboardService(pimServiceURL, iamServiceURL, tenantServiceURL)
 	adminHandler := admin.NewHandlerWithLogger(dashboardService, bffLogger)
 
-	// Handler para admin global catalog (passthrough a PIM, MC-E34)
-	globalCatalogAdminService := admin.NewGlobalCatalogService(pimServiceURL)
+	// Handler para admin global catalog (passthrough a catalog-service, PLAT-E39 T8b — antes PIM)
+	// D3.1: reenvía el JWT del caller; catalog-service verifica rol system_admin dentro del servicio.
+	globalCatalogAdminService := admin.NewGlobalCatalogService(catalogServiceURL)
 	globalCatalogAdminHandler := admin.NewGlobalCatalogHandlerWithLogger(globalCatalogAdminService, bffLogger)
 
 	// Handler para tenant dashboard (orquesta PIM + Stock con scope de tenant)
@@ -104,8 +122,11 @@ func main() {
 	tenantDashboardHandler := tenant_dashboard.NewHandlerWithLogger(tenantDashboardService, bffLogger)
 
 	// Handler para marketplace (cross-tenant, endpoints públicos)
+	// PLAT-E39 T8c2: `categories`/`categories/tree` migran al endpoint público anónimo de
+	// catalog-service (catalogServiceURL, D7/D3.3). products/stores/store-types siguen contra
+	// pim (cross-tenant, marketplace futuro).
 	s2sAPIKey := env.Get("S2S_API_KEY", "s2s-internal")
-	marketplaceHandler := handler.NewMarketplaceHandlerWithLogger(pimServiceURL, iamServiceURL, s2sAPIKey, bffLogger)
+	marketplaceHandler := handler.NewMarketplaceHandlerWithLogger(pimServiceURL, iamServiceURL, catalogServiceURL, s2sAPIKey, bffLogger)
 
 	// API v1
 	v1 := router.Group("/api/v1")
@@ -208,8 +229,10 @@ func main() {
 	log.Println("")
 	log.Println("Configuración:")
 	log.Printf("  PIM_SERVICE_URL: %s", pimServiceURL)
+	log.Printf("  CATALOG_SERVICE_URL: %s", catalogServiceURL)
 	log.Printf("  STOCK_SERVICE_URL: %s", stockServiceURL)
 	log.Printf("  TENANT_SERVICE_URL: %s", tenantServiceURL)
+	log.Printf("  ACCOUNT_SERVICE_URL: %s", accountServiceURL)
 	log.Printf("  IAM_SERVICE_URL: %s", iamServiceURL)
 	log.Printf("  Cache: tenant_config=%s, stock=%s", tenantConfigTTL, stockAvailabilityTTL)
 

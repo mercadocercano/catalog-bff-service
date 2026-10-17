@@ -14,13 +14,20 @@ import (
 	"catalog-bff-service/src/domain/port"
 )
 
-// MarketplaceHandler orquesta PIM + IAM Service para endpoints del marketplace
+// MarketplaceHandler orquesta PIM + IAM Service para endpoints del marketplace.
+//
+// PLAT-E39 T8c2 (D7): las rutas de `categories` ya no proxyean a PIM — leen el endpoint
+// público anónimo de catalog-service (`catalogServiceURL/api/v1/public/marketplace/categories`,
+// espejo D3.3 de T6d2/T8c1). Las rutas de products/stores/store-types siguen contra PIM (son
+// cross-tenant, deuda del marketplace futuro, dictamen @dev-architect T3) y, al cerrarse el
+// bypass `ExcludedRoutes "/api/v1/marketplace*"`, pasan por TenantValidation normal.
 type MarketplaceHandler struct {
-	pimServiceURL string
-	iamServiceURL string
-	s2sAPIKey     string
-	httpClient    *http.Client
-	logger        port.CatalogBFFEventLogger
+	pimServiceURL    string
+	iamServiceURL    string
+	catalogServiceURL string
+	s2sAPIKey        string
+	httpClient       *http.Client
+	logger           port.CatalogBFFEventLogger
 
 	// Cache de tenants (se refresca cada 5 minutos)
 	tenantCache   map[string]string // tenant_id → name
@@ -29,25 +36,27 @@ type MarketplaceHandler struct {
 }
 
 // NewMarketplaceHandler crea una nueva instancia del handler
-func NewMarketplaceHandler(pimServiceURL, iamServiceURL, s2sAPIKey string) *MarketplaceHandler {
+func NewMarketplaceHandler(pimServiceURL, iamServiceURL, catalogServiceURL, s2sAPIKey string) *MarketplaceHandler {
 	return &MarketplaceHandler{
-		pimServiceURL: pimServiceURL,
-		iamServiceURL: iamServiceURL,
-		s2sAPIKey:     s2sAPIKey,
-		httpClient:    &http.Client{Timeout: 5 * time.Second},
-		tenantCache:   make(map[string]string),
+		pimServiceURL:    pimServiceURL,
+		iamServiceURL:    iamServiceURL,
+		catalogServiceURL: catalogServiceURL,
+		s2sAPIKey:        s2sAPIKey,
+		httpClient:       &http.Client{Timeout: 5 * time.Second},
+		tenantCache:      make(map[string]string),
 	}
 }
 
 // NewMarketplaceHandlerWithLogger crea el handler inyectando el logger canónico.
-func NewMarketplaceHandlerWithLogger(pimServiceURL, iamServiceURL, s2sAPIKey string, logger port.CatalogBFFEventLogger) *MarketplaceHandler {
+func NewMarketplaceHandlerWithLogger(pimServiceURL, iamServiceURL, catalogServiceURL, s2sAPIKey string, logger port.CatalogBFFEventLogger) *MarketplaceHandler {
 	return &MarketplaceHandler{
-		pimServiceURL: pimServiceURL,
-		iamServiceURL: iamServiceURL,
-		s2sAPIKey:     s2sAPIKey,
-		httpClient:    &http.Client{Timeout: 5 * time.Second},
-		tenantCache:   make(map[string]string),
-		logger:        logger,
+		pimServiceURL:    pimServiceURL,
+		iamServiceURL:    iamServiceURL,
+		catalogServiceURL: catalogServiceURL,
+		s2sAPIKey:        s2sAPIKey,
+		httpClient:       &http.Client{Timeout: 5 * time.Second},
+		tenantCache:      make(map[string]string),
+		logger:           logger,
 	}
 }
 
@@ -239,18 +248,27 @@ func (h *MarketplaceHandler) GetStore(c *gin.Context) {
 	})
 }
 
-// ListCategories lista las categorías globales del marketplace
+// ListCategories lista las categorías globales del marketplace.
+//
+// PLAT-E39 T8c2 (D7): migra al endpoint público anónimo de catalog-service, espejo D3.3 de
+// T6d2/T8c1. El endpoint público sirve el árbol completo de categorías activas serializado
+// como PublicCategoryTree (allowlist id/name/slug/parent_id/children, filtro is_active=true
+// forzado por el usecase, sin input del caller). NO reenvía el query string: el endpoint
+// público no acepta parámetros (cero superficie de inyección, ver OWASP T8c1 A03), y forzarlo
+// no aporta nada — el caller recibe la taxonomía completa. Antes (pre-T8c2) esto proxyeaba a
+// PIM devolviendo una lista plana; sin consumidor en vivo del BFF (los consumers reales van a
+// PIM vía Kong `/pim/...`), servir el árbol público es la paridad que el contrato pide.
 func (h *MarketplaceHandler) ListCategories(c *gin.Context) {
-	queryString := ""
-	if raw := c.Request.URL.RawQuery; raw != "" {
-		queryString = "?" + raw
-	}
-	h.proxyToPIM(c, "/api/v1/marketplace/categories"+queryString)
+	h.proxyToPublicCatalog(c, "/api/v1/public/marketplace/categories")
 }
 
-// ListCategoriesTree devuelve el árbol de categorías
+// ListCategoriesTree devuelve el árbol de categorías del marketplace.
+//
+// PLAT-E39 T8c2 (D7): mismo endpoint público anónimo de catalog-service que ListCategories
+// (el endpoint público sirve el árbol — no hay variante plana en catalog-service). Mantener
+// ambas rutas del BFF preserva la surface de API; ambas resuelven al mismo upstream público.
 func (h *MarketplaceHandler) ListCategoriesTree(c *gin.Context) {
-	h.proxyToPIM(c, "/api/v1/marketplace/categories/tree")
+	h.proxyToPublicCatalog(c, "/api/v1/public/marketplace/categories")
 }
 
 // --- Product response with tenant enrichment ---
@@ -429,11 +447,10 @@ func (h *MarketplaceHandler) fetchFromPIM(c *gin.Context, path string) ([]byte, 
 		return nil, 0, fmt.Errorf("error creando request: %w", err)
 	}
 
+	// Sólo se reenvía Authorization: PIM deriva identidad y rol del JWT. El header de rol crudo
+	// del cliente es forjable y PIM no lo consume (D3.1) — reenviarlo sería abrir el bypass.
 	if auth := c.GetHeader("Authorization"); auth != "" {
 		req.Header.Set("Authorization", auth)
-	}
-	if role := c.GetHeader("X-User-Role"); role != "" {
-		req.Header.Set("X-User-Role", role)
 	}
 
 	resp, err := h.httpClient.Do(req)
@@ -469,4 +486,61 @@ func (h *MarketplaceHandler) proxyToPIM(c *gin.Context, path string) {
 	}
 
 	c.JSON(statusCode, result)
+}
+
+// proxyToPublicCatalog hace un GET anónimo al endpoint público de catalog-service (PLAT-E39
+// T8c2, D7/D3.3). Es intencional que NO reenvíe Authorization ni X-User-Role:
+//   - El endpoint público es anónimo por diseño (Kong catalog-public-service sin jwt/ACL,
+//     handler sobre publicCatalogGroup sin auth), así que un JWT no se necesita.
+//   - Reenviar el header de rol crudo del cliente (X-User-Role) sería arrastrar exactamente el
+//     bypass de aislamiento forjable que motivó PLAT-E39 (marketplace_handler.go:435-437,
+//     D3.1). Cerrarlo, no arrastrarlo, es la condición de cierre de esta tarea.
+//
+// El upstream (catalog-service) preserva su status code (404/500/etc. llegan como tales);
+// err != nil sólo para fallas de transporte → 502.
+func (h *MarketplaceHandler) proxyToPublicCatalog(c *gin.Context, path string) {
+	upstreamURL := h.catalogServiceURL + path
+
+	req, err := http.NewRequestWithContext(c.Request.Context(), http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "catalog",
+			Reason:          err.Error(),
+		})
+		response.JSON(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	// Tráfico anónimo: sin Authorization, sin X-User-Role (D3.1/D3.3).
+
+	resp, err := h.httpClient.Do(req)
+	if err != nil {
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "catalog",
+			Reason:          err.Error(),
+		})
+		response.JSON(c, http.StatusBadGateway, err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		h.log(port.CatalogBFFEvent{
+			Event:           "catalog_bff.upstream_failed",
+			UpstreamService: "catalog",
+			Reason:          err.Error(),
+		})
+		response.JSON(c, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	var result interface{}
+	if err := json.Unmarshal(body, &result); err != nil {
+		c.Data(resp.StatusCode, "application/json", body)
+		return
+	}
+
+	c.JSON(resp.StatusCode, result)
 }

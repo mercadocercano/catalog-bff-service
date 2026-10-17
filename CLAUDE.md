@@ -20,7 +20,7 @@ go test ./...
 
 ## Variables de entorno
 
-`PIM_SERVICE_URL`, `STOCK_SERVICE_URL`, `TENANT_SERVICE_URL`, `IAM_SERVICE_URL`, `PORT=8085`, `JWT_SECRET`, `TENANT_CONFIG_CACHE_TTL` (p. ej. 60s), `STOCK_CACHE_TTL` (p. ej. 5s), `CACHE_CLEANUP_INTERVAL`.
+`PIM_SERVICE_URL`, `STOCK_SERVICE_URL`, `TENANT_SERVICE_URL` (sólo health/stats del dashboard admin), `ACCOUNT_SERVICE_URL` + `ACCOUNT_SERVICE_S2S_KEY` (config del tenant `catalog.stock_policy` contra account-service, scope `config:read` — ACC-E04 T5; vacía → fallback `REQUIRE_STOCK`), `IAM_SERVICE_URL`, `PORT=8085`, `JWT_SECRET`, `TENANT_CONFIG_CACHE_TTL` (p. ej. 60s), `STOCK_CACHE_TTL` (p. ej. 5s), `CACHE_CLEANUP_INTERVAL`.
 
 ## Caché
 
